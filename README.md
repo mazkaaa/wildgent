@@ -1,159 +1,105 @@
-# Turborepo starter
+# WildGent
 
-This Turborepo starter is maintained by the Turborepo core team.
+WildGent is a small cooperative creature adventure built to demonstrate a new
+WebMCP gameplay pattern: the human player and Echo, an external AI companion,
+act on the same deterministic game state. Resonating with a WildGent adds a new
+world capability to both the manual game and Echo's registered tools.
 
-## Using this example
+The hackathon slice is intentionally compact: help Voltyn, unlock `interface`,
+open the ruins together, contribute a human-only discovery, face one guardian,
+and reach the Ancient Core.
 
-Run the following command:
+## Stack
 
-```sh
-npx create-turbo@latest
+- Vite, React 19, Tailwind CSS 4, and raw Three.js
+- Effect 4 game engine running authoritatively in the browser
+- Native `document.modelContext` WebMCP integration
+- Cloudflare Workers static-assets deployment
+- Vitest, Playwright, Biome, npm workspaces, and Turborepo
+
+## Workspace
+
+```text
+apps/game                 Playable web game, Three.js view, React HUD, WebMCP
+packages/game-engine      State, commands, queries, deterministic rules, saves
 ```
 
-## What's inside?
+Both the manual interface and WebMCP cross the same engine seam:
 
-This Turborepo includes the following packages/apps:
-
-### Apps and Packages
-
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `@next/eslint-plugin-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
-
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo build
+```mermaid
+flowchart LR
+  Human[Manual controls] --> Coordinator[Action coordinator]
+  Echo[External WebMCP agent] --> Coordinator
+  Coordinator --> Engine[Effect game engine]
+  Engine --> State[(Game state)]
+  Engine --> Events[Game events]
+  Events --> View[Three.js + React presentation]
 ```
 
-Without global `turbo`, use your package manager:
+## Local development
 
-```sh
-cd my-turborepo
-npx turbo build
-npm exec turbo build
-npm exec turbo build
+Requirements: Node.js 22+ and npm 10.9.8+.
+
+```bash
+npm install
+npm run dev
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+Quality checks:
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo build --filter=docs
+```bash
+npm run check
+npm run build
+npm run test:e2e
 ```
 
-Without global `turbo`:
+## WebMCP setup
 
-```sh
-npx turbo build --filter=docs
-npm exec turbo build --filter=docs
-npm exec turbo build --filter=docs
+WildGent uses the native imperative WebMCP interface, `document.modelContext`.
+The game remains manually playable when the interface is unavailable.
+
+Local Chrome testing currently requires the WebMCP testing flag:
+
+1. Open `chrome://flags/#enable-webmcp-testing`.
+2. Enable the flag and relaunch Chrome.
+3. Open the local WildGent origin using the supported WebMCP-capable agent.
+4. Confirm the in-game preflight reports that tool registration is available.
+
+Hosted acceptance must use HTTPS and the event-supported Chrome/WebMCP origin
+trial or preview environment. Mocked browser tests verify the adapter contract,
+but do not prove that an external agent can discover and invoke tools.
+
+## Judge Demo
+
+Choose **Judge Demo** from the title screen. The prepared flow begins before
+Voltyn Resonance so judges can see `interface` become available:
+
+1. Ask Echo to inspect and help with Voltyn's relay.
+2. After Resonance, enable **Avoid battles**.
+3. Ask: “We need to reach the signal. Figure it out, but don't start any battles.”
+4. When Echo reports `HUMAN_DISCOVERY_REQUIRED`, manually investigate the cyan
+   signal in the vines.
+5. Let Echo resume, open the ruin, and demonstrate the guardian refusal. Clear
+   **Avoid battles** with the human control before taking the manual battle
+   actions needed to finish the slice.
+
+## Deployment
+
+Authenticate Wrangler, then deploy the Vite/Cloudflare build:
+
+```bash
+npm run build
+npm run deploy
 ```
 
-### Develop
+Before submission, configure the event-provided WebMCP origin-trial token for
+the production origin and rehearse the complete Judge Demo with the actual
+supported external agent.
 
-To develop all apps and packages, run the following command:
+## Assets and licenses
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo dev
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo dev
-npm exec turbo dev
-npm exec turbo dev
-```
-
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo dev --filter=web
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo dev --filter=web
-npm exec turbo dev --filter=web
-npm exec turbo dev --filter=web
-```
-
-### Remote Caching
-
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo login
-npm exec turbo login
-npm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-npm exec turbo link
-npm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+- Source code: MIT, see [LICENSE](LICENSE).
+- World and creature geometry: original procedural Three.js primitives.
+- No third-party game art is bundled in the initial implementation.
+- Any future fonts, audio, or external assets must be added with their license
+  and attribution recorded here before release.

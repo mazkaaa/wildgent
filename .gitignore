@@ -14,6 +14,8 @@ node_modules
 
 # Testing
 coverage
+playwright-report
+test-results
 
 # Turbo
 .turbo
@@ -26,6 +28,10 @@ coverage
 out/
 build
 dist
+
+# Cloudflare
+.wrangler/
+.dev.vars
 
 
 # Debug
