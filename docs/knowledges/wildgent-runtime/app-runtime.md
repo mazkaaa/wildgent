@@ -39,5 +39,5 @@ opens with the Resonance objective even though the relay is the current scene.
 `WorldScene` is mounted only after gameplay leaves preflight. It creates the 10 by 7 tile map,
 landmark hit targets, a shared expedition marker, and camera. `setSnapshot` derives marker placement
 only from authoritative position. Direct movement interpolates for up to 600 ms, settles a promise
-when marker/camera presentation catches up, and snaps immediately for reduced motion. Accepted
-movement activity colors the pulse coral for human or cyan for Echo; this is presentation only.
+when marker/camera presentation catches up, and snaps immediately for reduced motion. The human
+marker remains ember-stable; actor and capability differences appear through transient world cues.

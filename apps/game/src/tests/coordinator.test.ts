@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { type GameAction, type GameSnapshot, INITIAL_SNAPSHOT } from "../app-model";
 import { createAppRuntime } from "../app-runtime";
 import { ActionCoordinator, EngineAdapter, type RawEngine } from "../engine-adapter";
-import { PresentationGate } from "../rendering/world-scene";
+import { PresentationGate, presentationCuesForTransition } from "../rendering/world-scene";
 
 const fakeEngine = (events: string[], delay = 0): RawEngine => {
   let snapshot: GameSnapshot = { ...INITIAL_SNAPSHOT, activity: [...INITIAL_SNAPSHOT.activity] };
@@ -245,6 +245,47 @@ describe("ActionCoordinator", () => {
     expect(gate.isPending).toBe(false);
   });
 
+  it("derives world cues from authoritative transitions without changing the marker actor", () => {
+    const previous: GameSnapshot = {
+      ...INITIAL_SNAPSHOT,
+      phase: "journey",
+      flags: { ...INITIAL_SNAPSHOT.flags, beaconLit: true },
+      activity: [...INITIAL_SNAPSHOT.activity],
+    };
+    const current: GameSnapshot = {
+      ...previous,
+      version: previous.version + 1,
+      flags: {
+        ...previous.flags,
+        resonanceCalibrated: true,
+        rubbleCleared: true,
+      },
+      activity: [
+        ...previous.activity,
+        {
+          id: "echo-break",
+          kind: "echo",
+          actor: "echo",
+          commandType: "break",
+          label: "Echo cleared the rubble",
+          detail: "The path opens.",
+          timestamp: Date.now(),
+          accepted: true,
+        },
+      ],
+    };
+
+    expect(presentationCuesForTransition(previous, current)).toEqual([
+      { type: "resonance", landmark: "relay-station", actor: "echo" },
+      {
+        type: "capability",
+        capability: "break",
+        landmark: "ruins-rubble",
+        actor: "echo",
+      },
+    ]);
+  });
+
   it("projects authoritative engine position without a second visual cursor", async () => {
     const events: string[] = [];
     const raw = fakeEngine(events) as RawEngine;
@@ -268,12 +309,14 @@ describe("ActionCoordinator", () => {
     await adapter.dispatch({ type: "MOVE_TO", position: { x: 4, y: 2 } });
     await adapter.dispatch({ type: "TRAVEL_TO", zone: "ruins" });
     await adapter.dispatch({ type: "INTERACT", landmark: "relay-station" });
+    await adapter.dispatch({ type: "ATTACK", move: "environment" });
 
     expect(commands).toEqual([
       { type: "MOVE_TO_POSITION", position: { x: 4, y: 2 } },
       { type: "MOVE", targetId: "ruins" },
       { type: "MOVE", targetId: "relay" },
       { type: "BREAK", targetId: "voltyn-relay" },
+      { type: "BATTLE_ACTION", action: "environment" },
     ]);
   });
 
@@ -292,6 +335,23 @@ describe("ActionCoordinator", () => {
     });
     expect(result).toMatchObject({ ok: true, status: "accepted" });
     expect(runtime.gameEnginePort.getSnapshot()).toMatchObject({ beaconLit: true });
+  });
+
+  it("blocks WebMCP mutations while the human pauses the expedition", async () => {
+    const engine = createGameEngine({ persist: false });
+    const runtime = createAppRuntime(engine as unknown as RawEngine);
+
+    runtime.setPaused(true);
+    expect(runtime.isPaused()).toBe(true);
+    await expect(
+      runtime.gameEnginePort.dispatch({ type: "ignite", targetId: "echo-beacon" }),
+    ).resolves.toMatchObject({ ok: false, code: "BUSY" });
+    expect(runtime.gameEnginePort.getSnapshot()).toMatchObject({ beaconLit: false });
+
+    runtime.setPaused(false);
+    await expect(
+      runtime.gameEnginePort.dispatch({ type: "ignite", targetId: "echo-beacon" }),
+    ).resolves.toMatchObject({ ok: true });
   });
 
   it("locks a mutation until engine state and presentation sync finish", async () => {

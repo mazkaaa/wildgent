@@ -170,7 +170,13 @@ export class EngineAdapter {
         const commands: unknown[] = [];
         if (battle.status === "encounter") commands.push({ type: "START_BATTLE" });
         const actionName =
-          action.move === "resonance" ? "signature" : action.move === "guard" ? "defend" : "strike";
+          action.move === "resonance"
+            ? "signature"
+            : action.move === "guard"
+              ? "defend"
+              : action.move === "environment"
+                ? "environment"
+                : "strike";
         commands.push({ type: "BATTLE_ACTION", action: actionName });
         return commands;
       }

@@ -24,15 +24,22 @@ const ZONE_OFFSETS: Record<ZoneId, ZoneOffset> = {
 const COLORS = {
   canopy: 0x153f35,
   canopyDeep: 0x0f302b,
+  canopyMid: 0x235540,
   moss: 0x41734c,
   mossLight: 0x6d9a5b,
+  mossBright: 0x9abb61,
   fern: 0x8dbb72,
+  fernDeep: 0x2d5e42,
   soil: 0x75624a,
+  soilDark: 0x3d4437,
   clay: 0xb79a6f,
+  clayLight: 0xd0b784,
   stone: 0x716e5d,
   stoneLight: 0xa99f82,
+  stoneDark: 0x454d49,
   water: 0x64b4a5,
   cyan: 0x77f0e6,
+  cyanDeep: 0x1caaa9,
   ember: 0xe36c4f,
   gold: 0xf0c276,
   white: 0xf4f0d8,
@@ -45,6 +52,67 @@ export type PresentationRequest = {
   key: string;
   promise: Promise<void>;
   resolve: () => void;
+};
+
+export type PresentationCue =
+  | { type: "landmark"; landmark: LandmarkId; actor?: "human" | "echo" | "system" }
+  | {
+      type: "capability";
+      capability: "ignite" | "break" | "interface";
+      landmark: LandmarkId;
+      actor?: "human" | "echo" | "system";
+    }
+  | { type: "resonance"; landmark: LandmarkId; actor?: "human" | "echo" | "system" }
+  | { type: "battle-impact"; actor?: "human" | "echo" | "system" }
+  | { type: "camera-transition"; zone: ZoneId };
+
+/**
+ * Derive presentation-only cues from two authoritative snapshots. The engine remains the source
+ * of truth; this helper only notices completed transitions so the scene can make them legible.
+ */
+export const presentationCuesForTransition = (
+  previous: GameSnapshot | null,
+  current: GameSnapshot,
+): PresentationCue[] => {
+  if (!previous) return [];
+  const cues: PresentationCue[] = [];
+  if (previous.zone !== current.zone) cues.push({ type: "camera-transition", zone: current.zone });
+
+  const completed: Array<[keyof GameSnapshot["flags"], LandmarkId, PresentationCue["type"]]> = [
+    ["beaconLit", "camp-beacon", "landmark"],
+    ["resonanceCalibrated", "relay-station", "resonance"],
+    ["rubbleCleared", "ruins-rubble", "capability"],
+    ["powerRestored", "ruins-power", "capability"],
+    ["sigilRead", "ruins-sigil", "capability"],
+    ["vinesDiscovered", "ruins-vines", "landmark"],
+    ["coreEntered", "ancient-core", "landmark"],
+  ];
+  for (const [flag, landmark, type] of completed) {
+    if (current.flags[flag] && !previous.flags[flag]) {
+      if (type === "capability") {
+        const event = [...current.activity].reverse().find((item) => item.accepted !== false);
+        const command = event?.commandType ?? "";
+        const capability = command.includes("ignite")
+          ? "ignite"
+          : command.includes("interface")
+            ? "interface"
+            : "break";
+        cues.push({ type, capability, landmark, actor: event?.actor });
+      } else if (type === "resonance") {
+        const event = [...current.activity].reverse().find((item) => item.accepted !== false);
+        cues.push({ type: "resonance", landmark, actor: event?.actor });
+      } else {
+        const event = [...current.activity].reverse().find((item) => item.accepted !== false);
+        cues.push({ type: "landmark", landmark, actor: event?.actor });
+      }
+    }
+  }
+
+  if (current.battle && previous.battle && current.battle.enemyHp < previous.battle.enemyHp) {
+    const event = [...current.activity].reverse().find((item) => item.kind === "battle");
+    cues.push({ type: "battle-impact", actor: event?.actor });
+  }
+  return cues;
 };
 
 /** Owns one in-flight presentation request and settles superseded requests exactly once. */
@@ -91,8 +159,18 @@ const material = (color: number, roughness = 0.88, emissive = 0x000000) =>
     color,
     roughness,
     metalness: 0.02,
+    flatShading: true,
     emissive,
     emissiveIntensity: emissive ? 1.2 : 0,
+  });
+
+const effectMaterial = (color: number, opacity = 0.78) =>
+  new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
   });
 
 const box = (size: [number, number, number], color: number, y = 0) => {
@@ -289,14 +367,20 @@ export class WorldScene {
   private readonly onHumanSignalClick?: HumanSignalClick;
   private readonly onCellClick?: CellClick;
   private readonly expeditionMarker = createExpeditionMarker();
+  private readonly transientEffects = new Set<{
+    group: THREE.Group;
+    startedAt: number;
+    duration: number;
+    resolve: () => void;
+  }>();
   private hasSnapshot = false;
+  private previousSnapshot: GameSnapshot | null = null;
   private markerDestination = new THREE.Vector3();
   private markerStart = new THREE.Vector3();
   private markerStartedAt = 0;
   private markerDuration = 0;
   private readonly presentationGate = new PresentationGate();
   private markerPulseUntil = 0;
-  private markerBaseColor = COLORS.ember;
   private lastMovementEventId: string | null = null;
   private frame = 0;
 
@@ -351,6 +435,10 @@ export class WorldScene {
     }
     this.updateLandmarkPresentation(snapshot);
     this.setMarkerActor(snapshot);
+    const cuePromises = presentationCuesForTransition(this.previousSnapshot, snapshot).map((cue) =>
+      this.presentCue(cue),
+    );
+    this.previousSnapshot = snapshot;
 
     if (!this.hasSnapshot) {
       this.hasSnapshot = true;
@@ -358,7 +446,7 @@ export class WorldScene {
       this.markerDestination.set(target.x, 0.03, target.z);
       this.camera.position.copy(this.cameraDestination);
       this.cameraTarget.copy(this.lookDestination);
-      return Promise.resolve();
+      return Promise.all(cuePromises).then(() => undefined);
     }
     if (this.presentationGate.key === key) return this.presentationGate.begin(key);
     this.presentationGate.settle();
@@ -366,7 +454,7 @@ export class WorldScene {
       this.expeditionMarker.position.x === target.x &&
       this.expeditionMarker.position.z === target.z
     ) {
-      return Promise.resolve();
+      return Promise.all(cuePromises).then(() => undefined);
     }
 
     const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
@@ -376,12 +464,91 @@ export class WorldScene {
       this.expeditionMarker.position.copy(this.markerDestination);
       this.camera.position.copy(this.cameraDestination);
       this.cameraTarget.copy(this.lookDestination);
-      return Promise.resolve();
+      return Promise.all(cuePromises).then(() => undefined);
     }
     const distance = this.markerStart.distanceTo(this.markerDestination);
     this.markerDuration = Math.min(600, Math.max(140, distance * 180));
     this.markerStartedAt = performance.now();
-    return this.presentationGate.begin(key);
+    return Promise.all([this.presentationGate.begin(key), ...cuePromises]).then(() => undefined);
+  }
+
+  /** Play an authored in-world cue. Reduced-motion users receive the settled presentation. */
+  presentCue(cue: PresentationCue): Promise<void> {
+    if (cue.type === "camera-transition") return Promise.resolve();
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    const target = this.worldPositionForCue(cue);
+    const color =
+      cue.actor === "human" ? COLORS.ember : cue.actor === "system" ? COLORS.gold : COLORS.cyan;
+    const group = this.createCueEffect(cue, color);
+    group.position.set(target.x, 0.05, target.z);
+    this.root.add(group);
+    if (reduced) {
+      group.visible = true;
+      this.root.remove(group);
+      group.traverse((object) => {
+        const mesh = object as THREE.Mesh;
+        mesh.geometry?.dispose?.();
+        if (Array.isArray(mesh.material)) {
+          mesh.material.forEach((entry) => {
+            entry.dispose();
+          });
+        } else mesh.material?.dispose?.();
+      });
+      return Promise.resolve();
+    }
+    return new Promise<void>((resolve) => {
+      this.transientEffects.add({ group, startedAt: performance.now(), duration: 720, resolve });
+    });
+  }
+
+  private worldPositionForCue(cue: Exclude<PresentationCue, { type: "camera-transition" }>) {
+    if (cue.type === "battle-impact") return worldPositionFor({ x: 7, y: 4 }, this.activeZone);
+    for (const zone of Object.keys(ZONE_CONTENT) as ZoneId[]) {
+      const landmark = ZONE_CONTENT[zone].landmarks.find((entry) => entry.id === cue.landmark);
+      if (landmark) return worldPositionFor(landmark.position, zone);
+    }
+    return worldPositionFor({ x: 1, y: 1 }, this.activeZone);
+  }
+
+  private createCueEffect(
+    cue: Exclude<PresentationCue, { type: "camera-transition" }>,
+    color: number,
+  ) {
+    const group = new THREE.Group();
+    group.name = `presentation-${cue.type}`;
+    const radius = cue.type === "resonance" ? 1.6 : cue.type === "battle-impact" ? 0.95 : 0.72;
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(radius, cue.type === "battle-impact" ? 0.06 : 0.035, 5, 18),
+      effectMaterial(color, cue.type === "resonance" ? 0.9 : 0.75),
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.08;
+    group.add(ring);
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(
+        0.035,
+        cue.type === "resonance" ? 0.15 : 0.08,
+        cue.type === "resonance" ? 3.4 : 1.25,
+        6,
+      ),
+      effectMaterial(color, cue.type === "resonance" ? 0.42 : 0.55),
+    );
+    beam.position.y = cue.type === "resonance" ? 1.7 : 0.7;
+    group.add(beam);
+    for (let index = 0; index < (cue.type === "resonance" ? 10 : 6); index += 1) {
+      const shard = new THREE.Mesh(
+        new THREE.TetrahedronGeometry(cue.type === "battle-impact" ? 0.1 : 0.075, 0),
+        effectMaterial(color, 0.85),
+      );
+      const angle = (index / (cue.type === "resonance" ? 10 : 6)) * Math.PI * 2;
+      shard.position.set(
+        Math.cos(angle) * radius,
+        0.15 + (index % 3) * 0.24,
+        Math.sin(angle) * radius,
+      );
+      group.add(shard);
+    }
+    return group;
   }
 
   resize(width: number, height: number) {
@@ -395,6 +562,19 @@ export class WorldScene {
     canvas.removeEventListener("pointerdown", this.handlePointerDown);
     cancelAnimationFrame(this.frame);
     this.presentationGate.settle();
+    for (const effect of this.transientEffects) {
+      effect.resolve();
+      effect.group.traverse((object) => {
+        const mesh = object as THREE.Mesh;
+        mesh.geometry?.dispose?.();
+        if (Array.isArray(mesh.material)) {
+          mesh.material.forEach((entry) => {
+            entry.dispose();
+          });
+        } else mesh.material?.dispose?.();
+      });
+    }
+    this.transientEffects.clear();
     this.renderer.dispose();
     this.scene.traverse((object) => {
       const mesh = object as THREE.Mesh;
@@ -420,6 +600,16 @@ export class WorldScene {
     sun.shadow.camera.bottom = -18;
     this.scene.add(sun);
     this.scene.add(new THREE.HemisphereLight(0xa8d4ae, 0x18352c, 1.2));
+    for (const [zone, color, intensity] of [
+      ["camp", 0xffa35c, 1.35],
+      ["ruins", 0x61d8d2, 1.1],
+      ["core", 0x75e8e1, 1.2],
+    ] as const) {
+      const light = new THREE.PointLight(color, intensity, 8, 2);
+      const offset = ZONE_OFFSETS[zone];
+      light.position.set(offset.x, 2.2, offset.z - 0.8);
+      this.scene.add(light);
+    }
   }
 
   private buildWorld() {
@@ -433,6 +623,9 @@ export class WorldScene {
       this.buildZone(zone);
     }
     this.buildConnectingPath();
+    this.buildCampComposition();
+    this.buildRuinsComposition();
+    this.buildCoreComposition();
     this.buildCharacters();
     this.buildAmbientTrees();
   }
@@ -442,12 +635,15 @@ export class WorldScene {
     zoneGroup.name = `${zone}-zone`;
     this.root.add(zoneGroup);
     const zoneOffset = ZONE_OFFSETS[zone];
-    const tileMaterial = material(COLORS.mossLight);
     for (let y = 0; y < gridSize.height; y += 1) {
       for (let x = 0; x < gridSize.width; x += 1) {
+        const tileColors = [COLORS.mossLight, COLORS.moss, COLORS.fernDeep, COLORS.mossBright];
+        const tileMaterial = material(
+          tileColors[(x * 7 + y * 3 + zone.length) % tileColors.length] ?? COLORS.moss,
+        );
         const tile = new THREE.Mesh(
           new THREE.PlaneGeometry(tileSize * 0.94, tileSize * 0.94),
-          tileMaterial.clone(),
+          tileMaterial,
         );
         tile.rotation.x = -Math.PI / 2;
         const position = localPosition(x, y, zone);
@@ -467,6 +663,22 @@ export class WorldScene {
     clearing.scale.z = 0.68;
     clearing.receiveShadow = true;
     zoneGroup.add(clearing);
+
+    for (let index = 0; index < 8; index += 1) {
+      const angle = (index / 8) * Math.PI * 2 + zone.length * 0.2;
+      const stone = new THREE.Mesh(
+        new THREE.DodecahedronGeometry(0.12 + (index % 3) * 0.06, 0),
+        material(index % 2 ? COLORS.stone : COLORS.soilDark),
+      );
+      stone.position.set(
+        zoneOffset.x + Math.cos(angle) * (4.1 + (index % 2) * 0.45),
+        0.1,
+        zoneOffset.z + Math.sin(angle) * (2.7 + (index % 3) * 0.2),
+      );
+      stone.rotation.set(index * 0.4, index * 0.8, index * 0.2);
+      stone.castShadow = true;
+      zoneGroup.add(stone);
+    }
 
     for (const landmark of ZONE_CONTENT[zone].landmarks) {
       const landmarkObject = this.createLandmark(landmark.id);
@@ -502,6 +714,151 @@ export class WorldScene {
     marker.position.set(0, 0.08, 1.15);
     this.root.add(marker);
     this.animated.push({ object: marker, phase: 0, amplitude: 0.04, speed: 1.4 });
+  }
+
+  private buildCampComposition() {
+    const { x, z } = ZONE_OFFSETS.camp;
+    const camp = new THREE.Group();
+    camp.name = "camp-diorama";
+    camp.position.set(x - 0.2, 0, z + 0.15);
+
+    const deck = box([4.2, 0.12, 2.3], COLORS.soilDark, 0.02);
+    deck.position.set(-1.1, 0, 0.9);
+    camp.add(deck);
+    const fireRing = new THREE.Mesh(
+      new THREE.TorusGeometry(0.52, 0.11, 5, 8),
+      material(COLORS.stoneLight),
+    );
+    fireRing.rotation.x = Math.PI / 2;
+    fireRing.position.set(-2.4, 0.18, 0.15);
+    camp.add(fireRing);
+    const fire = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.24, 0),
+      material(COLORS.ember, 0.38, COLORS.ember),
+    );
+    fire.position.set(-2.4, 0.54, 0.15);
+    camp.add(fire);
+    this.animated.push({ object: fire, phase: 0.4, amplitude: 0.09, speed: 2.2 });
+
+    const tent = new THREE.Mesh(new THREE.ConeGeometry(1.5, 1.45, 4), material(COLORS.clay));
+    tent.scale.z = 0.76;
+    tent.position.set(-0.4, 0.8, 0.75);
+    tent.rotation.y = Math.PI / 4;
+    tent.castShadow = true;
+    camp.add(tent);
+    for (const side of [-1, 1]) {
+      const pole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.035, 0.05, 1.8, 5),
+        material(COLORS.gold),
+      );
+      pole.position.set(-0.4 + side * 1.28, 0.9, 0.75);
+      pole.rotation.z = side * 0.22;
+      camp.add(pole);
+    }
+
+    for (const index of [0, 1, 2]) {
+      const crate = box([0.44, 0.34, 0.44], index === 1 ? COLORS.clayLight : COLORS.clay, 0.2);
+      crate.position.set(0.75 + index * 0.52, 0.04, 1.06 + (index % 2) * 0.32);
+      crate.rotation.y = index * 0.16;
+      camp.add(crate);
+    }
+    const signalAntenna = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.045, 0.08, 1.9, 6),
+      material(COLORS.stoneLight),
+    );
+    signalAntenna.position.set(1.45, 0.97, -0.6);
+    camp.add(signalAntenna);
+    const signalOrb = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.16, 0),
+      material(COLORS.cyan, 0.3, COLORS.cyan),
+    );
+    signalOrb.position.set(1.45, 1.98, -0.6);
+    camp.add(signalOrb);
+    this.animated.push({ object: signalOrb, phase: 1.3, amplitude: 0.1, speed: 1.65 });
+    this.root.add(camp);
+  }
+
+  private buildRuinsComposition() {
+    const { x, z } = ZONE_OFFSETS.ruins;
+    const ruins = new THREE.Group();
+    ruins.name = "ruins-diorama";
+    ruins.position.set(x, 0, z);
+
+    const steps = box([4.2, 0.16, 1.8], COLORS.stoneDark, 0.08);
+    steps.position.set(0, 0, -1.5);
+    ruins.add(steps);
+    for (const side of [-1, 1]) {
+      const pillar = box([0.7, 2.8, 0.7], COLORS.stone, 1.4);
+      pillar.position.set(side * 1.75, 0, -2.28);
+      pillar.rotation.z = side * 0.035;
+      ruins.add(pillar);
+      const cap = box([0.95, 0.24, 0.95], COLORS.stoneLight, 2.85);
+      cap.position.set(side * 1.75, 0, -2.28);
+      cap.rotation.y = side * 0.12;
+      ruins.add(cap);
+    }
+    const lintel = box([3.6, 0.5, 0.72], COLORS.stone, 2.52);
+    lintel.position.set(0, 0, -2.28);
+    ruins.add(lintel);
+    const door = new THREE.Mesh(
+      new THREE.TorusGeometry(0.75, 0.12, 6, 12, Math.PI),
+      material(COLORS.cyan, 0.4, COLORS.cyan),
+    );
+    door.rotation.set(Math.PI / 2, 0, Math.PI / 2);
+    door.position.set(0, 1.5, -2.62);
+    ruins.add(door);
+    this.animated.push({ object: door, phase: 0.7, amplitude: 0.035, speed: 0.9 });
+
+    for (let index = 0; index < 7; index += 1) {
+      const fragment = box(
+        [0.26 + (index % 3) * 0.12, 0.6 + (index % 2) * 0.38, 0.3],
+        index % 2 ? COLORS.stone : COLORS.stoneLight,
+        0.3 + (index % 2) * 0.18,
+      );
+      fragment.position.set(-3 + index * 0.8, 0, -0.7 - (index % 2) * 0.28);
+      fragment.rotation.set(0, index * 0.43, index * 0.08);
+      ruins.add(fragment);
+    }
+    this.root.add(ruins);
+  }
+
+  private buildCoreComposition() {
+    const { x, z } = ZONE_OFFSETS.core;
+    const core = new THREE.Group();
+    core.name = "core-diorama";
+    core.position.set(x, 0, z);
+    const dais = new THREE.Mesh(
+      new THREE.CylinderGeometry(2.25, 2.8, 0.3, 8),
+      material(COLORS.stoneDark),
+    );
+    dais.position.y = 0.15;
+    dais.scale.z = 0.76;
+    core.add(dais);
+    for (const side of [-1, 1]) {
+      const monolith = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.36, 0.6, 2.9, 5),
+        material(side < 0 ? COLORS.stone : COLORS.stoneLight),
+      );
+      monolith.position.set(side * 1.35, 1.45, -0.2);
+      monolith.rotation.z = side * 0.09;
+      monolith.castShadow = true;
+      core.add(monolith);
+      const glyph = new THREE.Mesh(
+        new THREE.BoxGeometry(0.08, 0.8, 0.04),
+        material(COLORS.cyan, 0.3, COLORS.cyan),
+      );
+      glyph.position.set(side * 1.35, 1.55, -0.58);
+      core.add(glyph);
+    }
+    const halo = new THREE.Mesh(
+      new THREE.TorusGeometry(1.45, 0.055, 6, 20),
+      material(COLORS.cyan, 0.3, COLORS.cyan),
+    );
+    halo.rotation.x = Math.PI / 2;
+    halo.position.y = 0.44;
+    core.add(halo);
+    this.animated.push({ object: halo, phase: 0, amplitude: 0.05, speed: 0.8 });
+    this.root.add(core);
   }
 
   private buildCharacters() {
@@ -664,11 +1021,27 @@ export class WorldScene {
       );
       const isCurrentZone = landmark?.zone === snapshot.zone;
       const isSelected = snapshot.selectedLandmark === id;
+      const isComplete = landmark?.complete(snapshot) ?? false;
       object.visible = true;
-      object.scale.setScalar(isSelected ? 1.08 : 1);
+      object.scale.setScalar(isSelected ? 1.08 : isComplete ? 1.04 : 1);
       object.userData.available = landmark?.available(snapshot) ?? false;
-      object.userData.complete = landmark?.complete(snapshot) ?? false;
+      object.userData.complete = isComplete;
       object.userData.currentZone = isCurrentZone;
+      object.traverse((child) => {
+        const mesh = child as THREE.Mesh;
+        const entries = Array.isArray(mesh.material)
+          ? mesh.material
+          : mesh.material
+            ? [mesh.material]
+            : [];
+        for (const entry of entries) {
+          const standard = entry as THREE.MeshStandardMaterial;
+          standard.userData.baseEmissive ??= standard.emissive.getHex();
+          standard.userData.baseEmissiveIntensity ??= standard.emissiveIntensity;
+          standard.emissive.setHex(isComplete ? COLORS.cyan : standard.userData.baseEmissive);
+          standard.emissiveIntensity = isComplete ? 0.48 : standard.userData.baseEmissiveIntensity;
+        }
+      });
     }
     const showSignal =
       snapshot.zone === "ruins" && snapshot.flags.sigilRead && !snapshot.flags.vinesDiscovered;
@@ -684,21 +1057,6 @@ export class WorldScene {
       return;
     this.lastMovementEventId = latest.id;
     this.markerPulseUntil = performance.now() + 520;
-    this.markerBaseColor = latest.actor === "echo" ? COLORS.cyan : COLORS.ember;
-    const materials: THREE.Material[] = [];
-    this.expeditionMarker.traverse((object) => {
-      const mesh = object as THREE.Mesh;
-      if (mesh.material) {
-        for (const entry of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
-          materials.push(entry);
-        }
-      }
-    });
-    for (const entry of materials) {
-      const standard = entry as THREE.MeshStandardMaterial;
-      standard.color.setHex(this.markerBaseColor);
-      standard.emissive.setHex(this.markerBaseColor);
-    }
   }
 
   private setCameraForZone(zone: ZoneId) {
@@ -770,21 +1128,44 @@ export class WorldScene {
         this.presentationGate.settle();
       }
     }
-    if (this.markerPulseUntil > 0 && performance.now() >= this.markerPulseUntil) {
-      this.markerPulseUntil = 0;
-      this.markerBaseColor = COLORS.ember;
-      this.expeditionMarker.traverse((object) => {
+    if (this.markerPulseUntil > 0) {
+      const pulseProgress = Math.max(0, this.markerPulseUntil - performance.now()) / 520;
+      this.expeditionMarker.scale.setScalar(1 + Math.sin(pulseProgress * Math.PI) * 0.14);
+      if (pulseProgress === 0) {
+        this.markerPulseUntil = 0;
+        this.expeditionMarker.scale.setScalar(1);
+      }
+    }
+    for (const effect of this.transientEffects) {
+      const progress = Math.min(1, (performance.now() - effect.startedAt) / effect.duration);
+      effect.group.scale.setScalar(0.72 + progress * 0.68);
+      effect.group.rotation.y += reduced ? 0 : 0.018;
+      effect.group.traverse((object) => {
         const mesh = object as THREE.Mesh;
-        for (const entry of Array.isArray(mesh.material)
-          ? mesh.material
-          : mesh.material
-            ? [mesh.material]
+        const effectEntry = mesh.material;
+        for (const entry of Array.isArray(effectEntry)
+          ? effectEntry
+          : effectEntry
+            ? [effectEntry]
             : []) {
-          const standard = entry as THREE.MeshStandardMaterial;
-          standard.color.setHex(COLORS.ember);
-          standard.emissive.setHex(COLORS.ember);
+          const animatedMaterial = entry as THREE.MeshBasicMaterial;
+          animatedMaterial.opacity = (1 - progress) * 0.86;
         }
       });
+      if (progress >= 1) {
+        this.transientEffects.delete(effect);
+        this.root.remove(effect.group);
+        effect.group.traverse((object) => {
+          const mesh = object as THREE.Mesh;
+          mesh.geometry?.dispose?.();
+          if (Array.isArray(mesh.material)) {
+            mesh.material.forEach((entry) => {
+              entry.dispose();
+            });
+          } else mesh.material?.dispose?.();
+        });
+        effect.resolve();
+      }
     }
     for (const entry of this.animated) {
       const y = reduced ? 0 : Math.sin(elapsed * entry.speed + entry.phase) * entry.amplitude;

@@ -25,6 +25,8 @@ export type AppRuntime = {
   reset: (options?: unknown) => ReturnType<ActionCoordinator["reset"]>;
   subscribeBusy: (listener: (busy: boolean) => void) => () => void;
   setPresentationSync: (sync: PresentationSync) => void;
+  setPaused: (paused: boolean) => void;
+  isPaused: () => boolean;
   /** Structural port consumed by the WebMCP adapter without a second state store. */
   gameEnginePort: {
     dispatch: (command: unknown, context?: unknown) => Promise<unknown>;
@@ -38,6 +40,7 @@ export type AppRuntime = {
 export const createAppRuntime = (rawEngine?: RawEngine): AppRuntime => {
   const engine = new EngineAdapter(rawEngine);
   const coordinator = new ActionCoordinator(engine);
+  let paused = false;
   return {
     engine,
     coordinator,
@@ -51,8 +54,22 @@ export const createAppRuntime = (rawEngine?: RawEngine): AppRuntime => {
     reset: (options) => coordinator.reset(options),
     subscribeBusy: (listener) => coordinator.subscribeBusy(listener),
     setPresentationSync: (sync) => coordinator.setPresentationSync(sync),
+    setPaused: (nextPaused) => {
+      paused = nextPaused;
+      if (paused) coordinator.cancelQueuedSteps();
+    },
+    isPaused: () => paused,
     gameEnginePort: {
       dispatch: async (command, context) => {
+        if (paused) {
+          return {
+            ok: false,
+            status: "refused",
+            code: "BUSY",
+            message: "The expedition is paused by the human player.",
+            snapshot: engine.raw.getSnapshot(),
+          };
+        }
         const result = await coordinator.dispatchCommand(command, context);
         if (result.ok) return result.value;
         return {

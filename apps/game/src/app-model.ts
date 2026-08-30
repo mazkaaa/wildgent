@@ -81,7 +81,7 @@ export type GameAction =
   | { type: "INTERACT"; landmark: LandmarkId }
   | { type: "DISCOVER_SIGNAL" }
   | { type: "SET_DIRECTIVE"; directive: "avoid-battles"; active: boolean }
-  | { type: "ATTACK"; move: "resonance" | "guard" | "pulse" }
+  | { type: "ATTACK"; move: "resonance" | "guard" | "pulse" | "environment" }
   | { type: "ENTER_CORE" }
   | { type: "RESET"; mode?: "journey" | "demo" };
 
