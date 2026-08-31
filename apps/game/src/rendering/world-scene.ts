@@ -25,6 +25,7 @@ const COLORS = {
   canopy: 0x153f35,
   canopyDeep: 0x0f302b,
   canopyMid: 0x235540,
+  canopyMist: 0x4e7968,
   moss: 0x41734c,
   mossLight: 0x6d9a5b,
   mossBright: 0x9abb61,
@@ -173,6 +174,22 @@ const effectMaterial = (color: number, opacity = 0.78) =>
     blending: THREE.AdditiveBlending,
   });
 
+const softGroundShadow = (radius: number, opacity = 0.28) => {
+  const shadow = new THREE.Mesh(
+    new THREE.CircleGeometry(radius, 12),
+    new THREE.MeshBasicMaterial({
+      color: COLORS.soilDark,
+      transparent: true,
+      opacity,
+      depthWrite: false,
+    }),
+  );
+  shadow.rotation.x = -Math.PI / 2;
+  shadow.position.y = 0.015;
+  shadow.scale.set(1.35, 0.68, 1);
+  return shadow;
+};
+
 const box = (size: [number, number, number], color: number, y = 0) => {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material(color));
   mesh.position.y = y;
@@ -203,89 +220,168 @@ const lowPolyTree = (height: number, tint: number) => {
 const createCindra = () => {
   const group = new THREE.Group();
   group.name = "Cindra";
-  const body = new THREE.Mesh(
-    new THREE.CapsuleGeometry(0.25, 0.42, 3, 6),
+  group.add(softGroundShadow(0.38, 0.3));
+  const cloak = new THREE.Mesh(
+    new THREE.ConeGeometry(0.4, 0.72, 6),
     material(CHARACTERS.cindra.color),
   );
-  body.position.y = 0.52;
-  body.rotation.z = -0.1;
-  body.castShadow = true;
-  group.add(body);
-  const hood = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.34, 6), material(COLORS.ember));
-  hood.position.set(0.02, 0.93, 0);
+  cloak.position.y = 0.42;
+  cloak.scale.z = 0.86;
+  cloak.castShadow = true;
+  group.add(cloak);
+  const chest = new THREE.Mesh(
+    new THREE.DodecahedronGeometry(0.27, 0),
+    material(CHARACTERS.cindra.color),
+  );
+  chest.position.set(0, 0.71, 0.03);
+  chest.scale.set(0.86, 1.1, 0.8);
+  chest.castShadow = true;
+  group.add(chest);
+  const hood = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.36, 6), material(COLORS.ember));
+  hood.position.set(0.02, 0.99, 0);
   hood.rotation.z = Math.PI;
   hood.castShadow = true;
   group.add(hood);
-  const eye = new THREE.Mesh(
-    new THREE.SphereGeometry(0.048, 6, 4),
-    material(COLORS.gold, 0.5, COLORS.gold),
+  const hoodRim = new THREE.Mesh(
+    new THREE.TorusGeometry(0.25, 0.035, 4, 8),
+    material(COLORS.gold, 0.6),
   );
-  eye.position.set(0.12, 0.93, 0.28);
-  group.add(eye);
+  hoodRim.rotation.x = Math.PI / 2;
+  hoodRim.position.set(0, 0.91, 0.02);
+  group.add(hoodRim);
+  for (const x of [-0.1, 0.1]) {
+    const eye = new THREE.Mesh(
+      new THREE.SphereGeometry(0.045, 6, 4),
+      material(COLORS.gold, 0.5, COLORS.gold),
+    );
+    eye.position.set(x, 0.98, 0.28);
+    group.add(eye);
+  }
+  const ember = new THREE.Mesh(
+    new THREE.TetrahedronGeometry(0.15, 0),
+    material(COLORS.ember, 0.45, COLORS.ember),
+  );
+  ember.position.set(0.02, 0.38, -0.31);
+  ember.rotation.x = 0.5;
+  group.add(ember);
   return group;
 };
 
 const createGrum = () => {
   const group = new THREE.Group();
   group.name = "Grum";
+  group.add(softGroundShadow(0.56, 0.34));
   const body = new THREE.Mesh(
-    new THREE.DodecahedronGeometry(0.45, 0),
+    new THREE.IcosahedronGeometry(0.48, 1),
     material(CHARACTERS.grum.color),
   );
-  body.position.y = 0.48;
-  body.scale.set(1.18, 0.9, 0.96);
+  body.position.y = 0.51;
+  body.scale.set(1.28, 0.92, 1.05);
   body.castShadow = true;
   group.add(body);
-  for (const x of [-0.22, 0.22]) {
-    const foot = box([0.14, 0.18, 0.24], COLORS.soil, 0.17);
+  for (const x of [-0.28, 0.28]) {
+    const foot = box([0.17, 0.2, 0.3], COLORS.soil, 0.18);
     foot.position.x = x;
-    foot.position.z = 0.06;
+    foot.position.z = 0.1;
     group.add(foot);
   }
-  const moss = new THREE.Mesh(new THREE.IcosahedronGeometry(0.18, 0), material(COLORS.mossLight));
-  moss.position.set(0.1, 0.78, 0.13);
+  for (const side of [-1, 1]) {
+    const horn = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.32, 5), material(COLORS.clayLight));
+    horn.position.set(side * 0.3, 0.85, 0.02);
+    horn.rotation.z = side * -0.55;
+    horn.castShadow = true;
+    group.add(horn);
+  }
+  const moss = new THREE.Mesh(new THREE.IcosahedronGeometry(0.2, 0), material(COLORS.mossBright));
+  moss.position.set(0.12, 0.78, 0.13);
+  moss.scale.set(1.25, 0.55, 0.7);
   group.add(moss);
+  const pack = box([0.3, 0.42, 0.2], COLORS.clay, 0.53);
+  pack.position.set(-0.37, 0.03, -0.05);
+  pack.rotation.z = -0.12;
+  group.add(pack);
+  const eye = new THREE.Mesh(
+    new THREE.SphereGeometry(0.055, 6, 4),
+    material(COLORS.gold, 0.5, COLORS.gold),
+  );
+  eye.position.set(0.14, 0.66, 0.42);
+  group.add(eye);
   return group;
 };
 
 const createVoltyn = () => {
   const group = new THREE.Group();
   group.name = "Voltyn";
+  group.add(softGroundShadow(0.34, 0.2));
   const body = new THREE.Mesh(
-    new THREE.OctahedronGeometry(0.27, 0),
+    new THREE.OctahedronGeometry(0.3, 1),
     material(CHARACTERS.voltyn.color, 0.42, COLORS.cyan),
   );
-  body.position.y = 0.86;
+  body.position.y = 0.9;
+  body.scale.set(0.8, 1.18, 0.9);
   body.castShadow = true;
   group.add(body);
   for (const side of [-1, 1]) {
     const wing = new THREE.Mesh(
-      new THREE.ConeGeometry(0.16, 0.44, 4),
-      material(COLORS.cyan, 0.35, COLORS.cyan),
+      new THREE.ConeGeometry(0.19, 0.5, 4),
+      material(side < 0 ? COLORS.cyanDeep : COLORS.cyan, 0.35, COLORS.cyan),
     );
-    wing.position.set(side * 0.29, 0.85, 0);
-    wing.rotation.z = side * Math.PI * 0.5;
+    wing.position.set(side * 0.3, 0.88, 0);
+    wing.rotation.set(0, side * 0.16, side * Math.PI * 0.5);
     group.add(wing);
   }
+  for (const side of [-1, 1]) {
+    const antenna = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.018, 0.028, 0.34, 5),
+      material(COLORS.gold, 0.55),
+    );
+    antenna.position.set(side * 0.12, 1.25, 0);
+    antenna.rotation.z = side * 0.28;
+    group.add(antenna);
+    const tip = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.055, 0),
+      material(COLORS.gold, 0.4, COLORS.gold),
+    );
+    tip.position.set(side * 0.17, 1.42, 0);
+    group.add(tip);
+  }
+  const tail = new THREE.Mesh(
+    new THREE.TetrahedronGeometry(0.14, 0),
+    material(COLORS.cyan, 0.3, COLORS.cyan),
+  );
+  tail.position.set(0, 0.58, -0.24);
+  tail.rotation.x = -0.6;
+  group.add(tail);
   return group;
 };
 
 const createGuardian = () => {
   const group = new THREE.Group();
   group.name = "Rootbound Guardian";
+  group.add(softGroundShadow(0.9, 0.42));
   const torso = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.52, 0.72, 1.7, 6),
+    new THREE.CylinderGeometry(0.56, 0.78, 1.7, 6),
     material(CHARACTERS.guardian.color),
   );
   torso.position.y = 1.18;
+  torso.scale.z = 0.86;
   torso.castShadow = true;
   group.add(torso);
-  const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.48, 0), material(COLORS.stoneLight));
-  head.position.y = 2.24;
+  const shoulder = new THREE.Mesh(
+    new THREE.BoxGeometry(1.65, 0.3, 0.52),
+    material(COLORS.stoneDark),
+  );
+  shoulder.position.y = 1.79;
+  shoulder.rotation.z = -0.03;
+  shoulder.castShadow = true;
+  group.add(shoulder);
+  const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.52, 1), material(COLORS.stoneLight));
+  head.position.set(0, 2.28, 0.02);
+  head.scale.set(0.9, 1.08, 0.86);
   head.castShadow = true;
   group.add(head);
   for (const side of [-1, 1]) {
-    const arm = box([0.24, 1.25, 0.28], COLORS.stone, 1.12);
+    const arm = box([0.28, 1.28, 0.32], COLORS.stone, 1.12);
     arm.position.x = side * 0.7;
     arm.rotation.z = side * -0.16;
     group.add(arm);
@@ -294,8 +390,22 @@ const createGuardian = () => {
     root.rotation.z = side * 0.3;
     group.add(root);
   }
+  for (const side of [-1, 1]) {
+    const crown = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.72, 5), material(COLORS.soil));
+    crown.position.set(side * 0.29, 2.77, -0.02);
+    crown.rotation.z = side * -0.34;
+    crown.castShadow = true;
+    group.add(crown);
+  }
+  const chest = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.2, 0),
+    material(COLORS.cyan, 0.3, COLORS.cyan),
+  );
+  chest.position.set(0, 1.36, 0.48);
+  chest.scale.y = 1.35;
+  group.add(chest);
   const eye = new THREE.Mesh(
-    new THREE.SphereGeometry(0.08, 8, 6),
+    new THREE.SphereGeometry(0.09, 8, 6),
     material(COLORS.cyan, 0.35, COLORS.cyan),
   );
   eye.position.set(0, 2.25, 0.42);
@@ -314,6 +424,60 @@ const localPosition = (x: number, y: number, zone: ZoneId) => ({
   x: ZONE_OFFSETS[zone].x + (x - (gridSize.width - 1) / 2) * tileSize,
   z: ZONE_OFFSETS[zone].z + (y - (gridSize.height - 1) / 2) * tileSize,
 });
+
+type LandmarkContent = (typeof ZONE_CONTENT)[ZoneId]["landmarks"][number];
+const LANDMARK_CONTENT = new Map<LandmarkId, LandmarkContent>(
+  (Object.keys(ZONE_CONTENT) as ZoneId[])
+    .flatMap((zone) => ZONE_CONTENT[zone].landmarks)
+    .map((landmark) => [landmark.id, landmark]),
+);
+
+type LandmarkSignalKind = "objective" | "echo" | "human";
+
+type LandmarkPresentation = {
+  ring: THREE.Mesh;
+  selectionRing: THREE.Mesh;
+  roleGlyph: THREE.Mesh;
+  lockGlyph: THREE.Mesh;
+  completeGlyph: THREE.Mesh;
+  signalKind: LandmarkSignalKind;
+};
+
+const signalKindForLandmark = (landmark: LandmarkId): LandmarkSignalKind => {
+  if (landmark === "ruins-vines") return "human";
+  if (
+    landmark === "relay-station" ||
+    landmark === "ruins-power" ||
+    landmark === "ruins-sigil" ||
+    landmark === "ancient-core"
+  )
+    return "echo";
+  return "objective";
+};
+
+const signalColorForKind = (kind: LandmarkSignalKind) => {
+  if (kind === "human") return COLORS.ember;
+  if (kind === "echo") return COLORS.cyan;
+  return COLORS.gold;
+};
+
+const createFoliageTuft = (scale: number, tint: number) => {
+  const tuft = new THREE.Group();
+  const shadow = softGroundShadow(0.18 * scale, 0.18);
+  shadow.scale.set(1.6, 0.5, 1);
+  tuft.add(shadow);
+  for (const side of [-1, 1]) {
+    const blade = new THREE.Mesh(
+      new THREE.ConeGeometry(0.08 * scale, 0.52 * scale, 4),
+      material(side < 0 ? tint : COLORS.fern, 0.95),
+    );
+    blade.position.set(side * 0.1 * scale, 0.25 * scale, 0);
+    blade.rotation.z = side * 0.26;
+    blade.castShadow = true;
+    tuft.add(blade);
+  }
+  return tuft;
+};
 
 const createExpeditionMarker = () => {
   const group = new THREE.Group();
@@ -349,6 +513,7 @@ export class WorldScene {
   private readonly root = new THREE.Group();
   private readonly tileMeshes: THREE.Mesh[] = [];
   private readonly landmarkMeshes = new Map<LandmarkId, THREE.Object3D>();
+  private readonly landmarkPresentations = new Map<LandmarkId, LandmarkPresentation>();
   private readonly humanSignalMeshes: THREE.Object3D[] = [];
   private readonly animated: Array<{
     object: THREE.Object3D;
@@ -373,6 +538,7 @@ export class WorldScene {
     duration: number;
     resolve: () => void;
   }>();
+  private readonly reducedCueTimeouts = new Map<THREE.Group, number>();
   private hasSnapshot = false;
   private previousSnapshot: GameSnapshot | null = null;
   private markerDestination = new THREE.Vector3();
@@ -382,6 +548,7 @@ export class WorldScene {
   private readonly presentationGate = new PresentationGate();
   private markerPulseUntil = 0;
   private lastMovementEventId: string | null = null;
+  private selectedLandmarkOverride: LandmarkId | null | undefined;
   private frame = 0;
 
   constructor(
@@ -426,14 +593,28 @@ export class WorldScene {
     this.animate();
   }
 
-  setSnapshot(snapshot: GameSnapshot): Promise<void> {
+  setSelectedLandmark(landmark: LandmarkId | null) {
+    this.selectedLandmarkOverride = landmark;
+    if (this.previousSnapshot) {
+      this.updateLandmarkPresentation(this.previousSnapshot, landmark);
+    }
+  }
+
+  setSnapshot(snapshot: GameSnapshot, selectedLandmark?: LandmarkId | null): Promise<void> {
+    const presentationSelection =
+      selectedLandmark === undefined
+        ? this.selectedLandmarkOverride === undefined
+          ? snapshot.selectedLandmark
+          : this.selectedLandmarkOverride
+        : selectedLandmark;
+    this.selectedLandmarkOverride = presentationSelection;
     const target = worldPositionFor(snapshot.position, snapshot.zone);
     const key = `${snapshot.zone}:${snapshot.position.x}:${snapshot.position.y}`;
     if (snapshot.zone !== this.activeZone) {
       this.activeZone = snapshot.zone;
       this.setCameraForZone(snapshot.zone);
     }
-    this.updateLandmarkPresentation(snapshot);
+    this.updateLandmarkPresentation(snapshot, presentationSelection);
     this.setMarkerActor(snapshot);
     const cuePromises = presentationCuesForTransition(this.previousSnapshot, snapshot).map((cue) =>
       this.presentCue(cue),
@@ -483,17 +664,21 @@ export class WorldScene {
     group.position.set(target.x, 0.05, target.z);
     this.root.add(group);
     if (reduced) {
-      group.visible = true;
-      this.root.remove(group);
-      group.traverse((object) => {
-        const mesh = object as THREE.Mesh;
-        mesh.geometry?.dispose?.();
-        if (Array.isArray(mesh.material)) {
-          mesh.material.forEach((entry) => {
-            entry.dispose();
-          });
-        } else mesh.material?.dispose?.();
-      });
+      group.scale.setScalar(1);
+      const timeout = window.setTimeout(() => {
+        this.reducedCueTimeouts.delete(group);
+        this.root.remove(group);
+        group.traverse((object) => {
+          const mesh = object as THREE.Mesh;
+          mesh.geometry?.dispose?.();
+          if (Array.isArray(mesh.material)) {
+            mesh.material.forEach((entry) => {
+              entry.dispose();
+            });
+          } else mesh.material?.dispose?.();
+        });
+      }, 720);
+      this.reducedCueTimeouts.set(group, timeout);
       return Promise.resolve();
     }
     return new Promise<void>((resolve) => {
@@ -575,6 +760,8 @@ export class WorldScene {
       });
     }
     this.transientEffects.clear();
+    for (const timeout of this.reducedCueTimeouts.values()) window.clearTimeout(timeout);
+    this.reducedCueTimeouts.clear();
     this.renderer.dispose();
     this.scene.traverse((object) => {
       const mesh = object as THREE.Mesh;
@@ -600,6 +787,9 @@ export class WorldScene {
     sun.shadow.camera.bottom = -18;
     this.scene.add(sun);
     this.scene.add(new THREE.HemisphereLight(0xa8d4ae, 0x18352c, 1.2));
+    const rim = new THREE.DirectionalLight(0x62c8c4, 0.75);
+    rim.position.set(8, 8, -10);
+    this.scene.add(rim);
     for (const [zone, color, intensity] of [
       ["camp", 0xffa35c, 1.35],
       ["ruins", 0x61d8d2, 1.1],
@@ -628,6 +818,7 @@ export class WorldScene {
     this.buildCoreComposition();
     this.buildCharacters();
     this.buildAmbientTrees();
+    this.buildAtmosphere();
   }
 
   private buildZone(zone: ZoneId) {
@@ -680,6 +871,20 @@ export class WorldScene {
       zoneGroup.add(stone);
     }
 
+    // A small deterministic fringe makes each clearing feel grown-in without adding
+    // another simulation or touching the grid that owns interaction coordinates.
+    for (let index = 0; index < 5; index += 1) {
+      const angle = zone.length * 0.31 + index * 1.21;
+      const tuft = createFoliageTuft(0.72 + (index % 3) * 0.14, COLORS.mossLight);
+      tuft.position.set(
+        zoneOffset.x + Math.cos(angle) * (3.35 + (index % 2) * 0.5),
+        0.02,
+        zoneOffset.z + Math.sin(angle) * (2.3 + (index % 3) * 0.25),
+      );
+      tuft.rotation.y = angle;
+      zoneGroup.add(tuft);
+    }
+
     for (const landmark of ZONE_CONTENT[zone].landmarks) {
       const landmarkObject = this.createLandmark(landmark.id);
       const position = localPosition(landmark.position.x, landmark.position.y, zone);
@@ -714,6 +919,18 @@ export class WorldScene {
     marker.position.set(0, 0.08, 1.15);
     this.root.add(marker);
     this.animated.push({ object: marker, phase: 0, amplitude: 0.04, speed: 1.4 });
+
+    for (let index = 0; index < 9; index += 1) {
+      const stone = new THREE.Mesh(
+        new THREE.DodecahedronGeometry(0.12 + (index % 3) * 0.025, 0),
+        material(index % 2 ? COLORS.clayLight : COLORS.soilDark),
+      );
+      stone.position.set(-6.8 + index * 1.7, 0.06, 1.15 + (index % 2 ? 0.13 : -0.08));
+      stone.rotation.set(index * 0.2, index * 0.55, index * 0.12);
+      stone.scale.set(1.25, 0.42, 0.86);
+      stone.castShadow = true;
+      this.root.add(stone);
+    }
   }
 
   private buildCampComposition() {
@@ -904,6 +1121,33 @@ export class WorldScene {
     }
   }
 
+  private buildAtmosphere() {
+    const haze = new THREE.MeshBasicMaterial({
+      color: COLORS.canopyMist,
+      transparent: true,
+      opacity: 0.085,
+      depthWrite: false,
+    });
+    for (const [index, zone] of (Object.keys(ZONE_OFFSETS) as ZoneId[]).entries()) {
+      const veil = new THREE.Mesh(new THREE.CircleGeometry(3.4 + index * 0.25, 16), haze);
+      veil.rotation.x = -Math.PI / 2;
+      veil.position.set(ZONE_OFFSETS[zone].x, 0.018, ZONE_OFFSETS[zone].z - 0.35);
+      veil.scale.set(1.12, 0.42, 1);
+      this.root.add(veil);
+    }
+    const horizon = new THREE.Mesh(
+      new THREE.PlaneGeometry(30, 4.5),
+      new THREE.MeshBasicMaterial({
+        color: COLORS.canopyDeep,
+        transparent: true,
+        opacity: 0.22,
+        depthWrite: false,
+      }),
+    );
+    horizon.position.set(0, 2.1, -9.5);
+    this.root.add(horizon);
+  }
+
   private createLandmark(landmark: LandmarkId) {
     const group = new THREE.Group();
     if (landmark === "camp-beacon") {
@@ -1011,24 +1255,141 @@ export class WorldScene {
       group.add(core);
       this.animated.push({ object: core, phase: 1, amplitude: 0.14, speed: 1.1 });
     }
+    this.decorateLandmark(group, landmark);
     return group;
   }
 
-  private updateLandmarkPresentation(snapshot: GameSnapshot) {
+  private decorateLandmark(group: THREE.Group, landmark: LandmarkId) {
+    const signalKind = signalKindForLandmark(landmark);
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.58, 0.035, 5, 14),
+      material(COLORS.stoneDark, 0.92),
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.055;
+    ring.userData.presentationPart = true;
+    group.add(ring);
+
+    const roleGeometry =
+      signalKind === "human"
+        ? new THREE.ConeGeometry(0.105, 0.25, 4)
+        : signalKind === "echo"
+          ? new THREE.OctahedronGeometry(0.14, 0)
+          : new THREE.TetrahedronGeometry(0.15, 0);
+    const roleGlyph = new THREE.Mesh(roleGeometry, material(COLORS.stoneDark, 0.8));
+    roleGlyph.position.y = 0.23;
+    roleGlyph.userData.presentationPart = true;
+    roleGlyph.castShadow = true;
+    group.add(roleGlyph);
+
+    const lockGlyph = new THREE.Mesh(
+      new THREE.BoxGeometry(0.2, 0.2, 0.2),
+      material(COLORS.stoneDark, 0.95),
+    );
+    lockGlyph.position.y = 0.23;
+    lockGlyph.userData.presentationPart = true;
+    lockGlyph.rotation.y = Math.PI / 4;
+    lockGlyph.castShadow = true;
+    group.add(lockGlyph);
+
+    const completeGlyph = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(0.14, 0),
+      material(COLORS.cyan, 0.38, COLORS.cyan),
+    );
+    completeGlyph.position.y = 0.23;
+    completeGlyph.userData.presentationPart = true;
+    completeGlyph.visible = false;
+    group.add(completeGlyph);
+
+    const selectionRing = new THREE.Mesh(
+      new THREE.TorusGeometry(0.79, 0.04, 5, 16),
+      material(COLORS.gold, 0.45, COLORS.gold),
+    );
+    selectionRing.rotation.x = Math.PI / 2;
+    selectionRing.position.y = 0.072;
+    selectionRing.userData.presentationPart = true;
+    selectionRing.visible = false;
+    group.add(selectionRing);
+    this.landmarkPresentations.set(landmark, {
+      ring,
+      selectionRing,
+      roleGlyph,
+      lockGlyph,
+      completeGlyph,
+      signalKind,
+    });
+    this.animated.push({
+      object: roleGlyph,
+      phase: landmark.length * 0.2,
+      amplitude: 0.035,
+      speed: 1.15,
+    });
+    this.animated.push({
+      object: completeGlyph,
+      phase: landmark.length * 0.17,
+      amplitude: 0.03,
+      speed: 0.85,
+    });
+  }
+
+  private updateLandmarkPresentation(snapshot: GameSnapshot, selectedLandmark: LandmarkId | null) {
     for (const [id, object] of this.landmarkMeshes) {
-      const landmark = ZONE_CONTENT[snapshot.zone].landmarks.find(
-        (candidate) => candidate.id === id,
-      );
+      const landmark = LANDMARK_CONTENT.get(id);
       const isCurrentZone = landmark?.zone === snapshot.zone;
-      const isSelected = snapshot.selectedLandmark === id;
+      const isSelected = isCurrentZone && selectedLandmark === id;
       const isComplete = landmark?.complete(snapshot) ?? false;
+      const isAvailable = landmark?.available(snapshot) ?? false;
+      const isInactive = !isCurrentZone;
+      const presentation = this.landmarkPresentations.get(id);
       object.visible = true;
       object.scale.setScalar(isSelected ? 1.08 : isComplete ? 1.04 : 1);
-      object.userData.available = landmark?.available(snapshot) ?? false;
+      object.userData.available = isAvailable;
       object.userData.complete = isComplete;
       object.userData.currentZone = isCurrentZone;
+      object.userData.inactive = isInactive;
+      object.userData.presentationState = isInactive
+        ? "inactive"
+        : isSelected
+          ? "selected"
+          : isComplete
+            ? "complete"
+            : isAvailable
+              ? "available"
+              : "locked";
+      if (presentation) {
+        const stateColor = isSelected
+          ? COLORS.gold
+          : isInactive
+            ? COLORS.canopyMid
+            : isComplete
+              ? COLORS.cyan
+              : isAvailable
+                ? signalColorForKind(presentation.signalKind)
+                : COLORS.stoneDark;
+        const ringMaterial = presentation.ring.material as THREE.MeshStandardMaterial;
+        ringMaterial.color.setHex(stateColor);
+        ringMaterial.emissive.setHex(
+          isSelected || (!isInactive && isComplete) ? stateColor : 0x000000,
+        );
+        ringMaterial.emissiveIntensity = isSelected ? 0.85 : !isInactive && isComplete ? 0.58 : 0;
+        const roleMaterial = presentation.roleGlyph.material as THREE.MeshStandardMaterial;
+        roleMaterial.color.setHex(isInactive ? COLORS.canopyMid : stateColor);
+        roleMaterial.emissive.setHex(
+          isSelected || (!isInactive && isAvailable) ? stateColor : 0x000000,
+        );
+        roleMaterial.emissiveIntensity = isSelected ? 0.8 : !isInactive && isAvailable ? 0.35 : 0;
+        presentation.selectionRing.visible = isSelected;
+        presentation.roleGlyph.visible = !isComplete && (isAvailable || isSelected);
+        presentation.lockGlyph.visible = !isAvailable && !isComplete;
+        presentation.completeGlyph.visible = isComplete;
+        const completeMaterial = presentation.completeGlyph.material as THREE.MeshStandardMaterial;
+        completeMaterial.color.setHex(isSelected ? COLORS.gold : COLORS.cyan);
+        completeMaterial.emissive.setHex(isSelected ? COLORS.gold : COLORS.cyan);
+        completeMaterial.emissiveIntensity = isInactive ? 0.16 : isSelected ? 0.75 : 0.5;
+      }
       object.traverse((child) => {
         const mesh = child as THREE.Mesh;
+        if (mesh.userData.presentationPart) return;
         const entries = Array.isArray(mesh.material)
           ? mesh.material
           : mesh.material
@@ -1036,10 +1397,21 @@ export class WorldScene {
             : [];
         for (const entry of entries) {
           const standard = entry as THREE.MeshStandardMaterial;
+          standard.userData.baseColor ??= standard.color.getHex();
           standard.userData.baseEmissive ??= standard.emissive.getHex();
           standard.userData.baseEmissiveIntensity ??= standard.emissiveIntensity;
-          standard.emissive.setHex(isComplete ? COLORS.cyan : standard.userData.baseEmissive);
-          standard.emissiveIntensity = isComplete ? 0.48 : standard.userData.baseEmissiveIntensity;
+          standard.color.setHex(
+            isInactive
+              ? COLORS.canopyDeep
+              : !isAvailable && !isComplete && !isSelected
+                ? COLORS.stoneDark
+                : standard.userData.baseColor,
+          );
+          standard.emissive.setHex(
+            !isInactive && isComplete ? COLORS.cyan : standard.userData.baseEmissive,
+          );
+          standard.emissiveIntensity =
+            !isInactive && isComplete ? 0.48 : standard.userData.baseEmissiveIntensity;
         }
       });
     }
@@ -1056,6 +1428,12 @@ export class WorldScene {
     if (!latest?.actor || latest.accepted === false || latest.id === this.lastMovementEventId)
       return;
     this.lastMovementEventId = latest.id;
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    if (reduced) {
+      this.markerPulseUntil = 0;
+      this.expeditionMarker.scale.setScalar(1);
+      return;
+    }
     this.markerPulseUntil = performance.now() + 520;
   }
 
@@ -1129,11 +1507,16 @@ export class WorldScene {
       }
     }
     if (this.markerPulseUntil > 0) {
-      const pulseProgress = Math.max(0, this.markerPulseUntil - performance.now()) / 520;
-      this.expeditionMarker.scale.setScalar(1 + Math.sin(pulseProgress * Math.PI) * 0.14);
-      if (pulseProgress === 0) {
+      if (reduced) {
         this.markerPulseUntil = 0;
         this.expeditionMarker.scale.setScalar(1);
+      } else {
+        const pulseProgress = Math.max(0, this.markerPulseUntil - performance.now()) / 520;
+        this.expeditionMarker.scale.setScalar(1 + Math.sin(pulseProgress * Math.PI) * 0.14);
+        if (pulseProgress === 0) {
+          this.markerPulseUntil = 0;
+          this.expeditionMarker.scale.setScalar(1);
+        }
       }
     }
     for (const effect of this.transientEffects) {

@@ -87,6 +87,143 @@ describe("WebMCP integration", () => {
     });
   });
 
+  it("reports checking while registration is pending and ready after a clean pass", async () => {
+    const { engine } = fakeEngine();
+    const { context } = fakeContext();
+    const registration = registerWebMcp(engine, {
+      document: browser(context),
+      window: { isSecureContext: true, crossOriginIsolated: true },
+    });
+
+    expect(registration.getStatus()).toMatchObject({
+      phase: "checking",
+      available: true,
+      secureContext: true,
+      originIsolated: true,
+      registeredTools: [],
+      failures: [],
+    });
+
+    await registration.ready;
+
+    expect(registration.getStatus()).toMatchObject({
+      phase: "ready",
+      registeredTools: expect.arrayContaining([
+        "get_game_state",
+        "look_around",
+        "move",
+        "inspect",
+        "interact",
+        "get_party",
+        "battle_action",
+        "ignite",
+        "break",
+      ]),
+      failures: [],
+    });
+  });
+
+  it("reports unsupported feature detection as unavailable", async () => {
+    const { engine } = fakeEngine();
+    const registration = registerWebMcp(engine, { document: {} });
+
+    expect(registration.getStatus()).toMatchObject({
+      phase: "unavailable",
+      available: false,
+      registeredTools: [],
+      failures: [],
+    });
+    await registration.ready;
+    expect(registration.getStatus().phase).toBe("unavailable");
+  });
+
+  it("reports sanitized registration failures as attention", async () => {
+    const { engine } = fakeEngine();
+    const registered: Registered[] = [];
+    const context: WebMcpModelContext = {
+      registerTool: vi.fn(async (tool, registrationOptions) => {
+        if (tool.name === "move") {
+          throw new Error("secret-token should never reach the UI");
+        }
+        registered.push({ tool, signal: registrationOptions?.signal });
+      }),
+    };
+    const registration = registerWebMcp(engine, { document: browser(context) });
+
+    const result = await registration.ready;
+    const status = registration.getStatus();
+
+    expect(result.failures).toHaveLength(1);
+    expect(status.phase).toBe("attention");
+    expect(status.failures).toEqual([{ name: "move", message: "Tool registration failed." }]);
+    expect(JSON.stringify(status)).not.toContain("secret-token");
+    expect(status.failures[0]).not.toHaveProperty("error");
+    expect(registered).toHaveLength(8);
+  });
+
+  it("does not expose custom exception names in sanitized failures", async () => {
+    const { engine } = fakeEngine();
+    const { context } = fakeContext();
+    context.registerTool = vi.fn(async (tool) => {
+      if (tool.name === "move") {
+        const error = new Error("private registration detail");
+        error.name = "secret-error-name";
+        throw error;
+      }
+    });
+    const registration = registerWebMcp(engine, { document: browser(context) });
+
+    await registration.ready;
+
+    expect(registration.getStatus().failures).toEqual([
+      { name: "move", message: "Tool registration failed." },
+    ]);
+    expect(JSON.stringify(registration.getStatus())).not.toContain("secret-error-name");
+  });
+
+  it("publishes status updates to subscribers, including dynamic interface registration", async () => {
+    const { engine, setSnapshot } = fakeEngine({ resonance: false });
+    const { context, registered } = fakeContext();
+    const registration = registerWebMcp(engine, { document: browser(context) });
+    const updates: string[][] = [];
+    const unsubscribe = registration.subscribeStatus((status) => {
+      updates.push([...status.registeredTools]);
+    });
+
+    await registration.ready;
+    setSnapshot({ resonance: true });
+    await vi.waitFor(() => {
+      expect(registered.map(({ tool }) => tool.name)).toContain("interface");
+      expect(updates).toEqual(expect.arrayContaining([expect.arrayContaining(["interface"])]));
+    });
+
+    const updateCount = updates.length;
+    unsubscribe();
+    setSnapshot({ resonance: false });
+    await Promise.resolve();
+    expect(updates).toHaveLength(updateCount);
+  });
+
+  it("isolates status snapshots between subscribers", async () => {
+    const { engine } = fakeEngine();
+    const { context } = fakeContext();
+    const first = vi.fn((status) => {
+      (status.registeredTools as string[]).push("tampered");
+      (status.failures as Array<{ name: string }>).push({ name: "tampered" });
+    });
+    const second = vi.fn();
+    const integration = createWebMcpIntegration(engine, { document: browser(context) });
+    integration.subscribeStatus(first);
+    integration.subscribeStatus(second);
+
+    await integration.register();
+
+    const latest = second.mock.calls[second.mock.calls.length - 1]?.[0];
+    expect(latest.registeredTools).not.toContain("tampered");
+    expect(latest.failures).toEqual([]);
+    expect(integration.getStatus().registeredTools).not.toContain("tampered");
+  });
+
   it("registers the nine startup tools and is idempotent", async () => {
     const { engine } = fakeEngine();
     const { context, registered } = fakeContext();
@@ -251,6 +388,11 @@ describe("WebMCP integration", () => {
 
     expect(result.duplicates).toEqual(["move"]);
     expect(result.registered).toHaveLength(8);
+    expect(integration.getStatus()).toMatchObject({
+      phase: "ready",
+      registeredTools: expect.arrayContaining(["move"]),
+      failures: [],
+    });
   });
 
   it("aborts all registrations on dispose", async () => {
@@ -260,6 +402,91 @@ describe("WebMCP integration", () => {
     await integration.register();
     integration.dispose();
     expect(registered.every(({ signal }) => signal?.aborted)).toBe(true);
+  });
+
+  it("cleans status subscriptions on disposal", async () => {
+    const { engine, setSnapshot } = fakeEngine();
+    const { context } = fakeContext();
+    const integration = createWebMcpIntegration(engine, { document: browser(context) });
+    const listener = vi.fn();
+    integration.subscribeStatus(listener);
+
+    await integration.register();
+    const callsBeforeDispose = listener.mock.calls.length;
+    integration.dispose();
+    setSnapshot({ resonance: true });
+    await Promise.resolve();
+
+    expect(listener).toHaveBeenCalledTimes(callsBeforeDispose);
+    expect(() => integration.subscribeStatus(listener)).not.toThrow();
+  });
+
+  it("does not fabricate a failure when disposal aborts an in-flight registration", async () => {
+    const { engine } = fakeEngine();
+    const { context } = fakeContext();
+    let rejectPending: ((reason?: unknown) => void) | undefined;
+    context.registerTool = vi.fn(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectPending = reject;
+        }),
+    );
+    const integration = createWebMcpIntegration(engine, { document: browser(context) });
+    const ready = integration.register();
+    await vi.waitFor(() => expect(context.registerTool).toHaveBeenCalled());
+
+    integration.dispose();
+    rejectPending?.(new Error("late failure after disposal"));
+    const result = await ready;
+
+    expect(result.failures).toEqual([]);
+    expect(integration.getStatus()).toMatchObject({ phase: "checking", failures: [] });
+  });
+
+  it("does not report a late successful registration after disposal", async () => {
+    const { engine } = fakeEngine();
+    const { context } = fakeContext();
+    let resolvePending: (() => void) | undefined;
+    context.registerTool = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolvePending = resolve;
+        }),
+    );
+    const integration = createWebMcpIntegration(engine, { document: browser(context) });
+    const ready = integration.register();
+    await vi.waitFor(() => expect(context.registerTool).toHaveBeenCalled());
+
+    integration.dispose();
+    resolvePending?.();
+    const result = await ready;
+
+    expect(result.registered).toEqual([]);
+    expect(result.duplicates).toEqual([]);
+    expect(result.failures).toEqual([]);
+  });
+
+  it("does not report a late duplicate registration after disposal", async () => {
+    const { engine } = fakeEngine();
+    const { context } = fakeContext();
+    let rejectPending: ((reason?: unknown) => void) | undefined;
+    context.registerTool = vi.fn(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectPending = reject;
+        }),
+    );
+    const integration = createWebMcpIntegration(engine, { document: browser(context) });
+    const ready = integration.register();
+    await vi.waitFor(() => expect(context.registerTool).toHaveBeenCalled());
+
+    integration.dispose();
+    rejectPending?.(new DOMException("Tool already registered", "InvalidStateError"));
+    const result = await ready;
+
+    expect(result.registered).toEqual([]);
+    expect(result.duplicates).toEqual([]);
+    expect(result.failures).toEqual([]);
   });
 
   it("starts registration from the app-facing registerWebMcp entrypoint", async () => {

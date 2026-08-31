@@ -13,10 +13,19 @@
 ## Registration
 
 `registerWebMcp` starts registration immediately and returns a `ready` promise. The adapter first
-checks `document.modelContext.registerTool`. It registers static tools once, subscribes to engine
-snapshots, and registers `interface` only after the snapshot proves Resonance is available.
-Duplicate registration errors are reported separately; disposal aborts pending registrations and
-unsubscribes from capability updates. Unsupported browsers remain playable manually.
+checks `document.modelContext.registerTool`. Its app-facing status starts in `checking` when the
+API exists, or `unavailable` otherwise, and settles to `ready` or `attention` after registration.
+`WebMcpUiStatus` exposes `phase`, availability/security hints, registered tool names, and
+sanitized `{ name, message, code? }` failures; raw exceptions are never exposed to the UI.
+Consumers read a defensive snapshot with `getStatus()` and receive changed snapshots through
+`subscribeStatus()` (including dynamic capability changes).
+
+It registers static tools once, subscribes to engine snapshots, and registers `interface` only
+after the snapshot proves Resonance is available. Duplicate registration errors are reported in
+`RegistrationReport.duplicates`, treated as usable registrations, and do not block other tools.
+Pending registrations are deduplicated per tool. Disposal is idempotent: it unsubscribes from the
+engine, aborts pending registrations, clears listeners/state, and ignores late success, duplicate,
+or failure results. Unsupported browsers remain playable manually.
 
 ## Static tools
 

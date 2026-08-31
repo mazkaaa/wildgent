@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
-import { GameApp } from "./app";
+import { WildGentApp } from "./app";
 import { type AppRuntime, getAppRuntime } from "./app-runtime";
 import { registerWebMcp, type WebMcpRegistration } from "./webmcp";
 import "./styles.css";
@@ -38,10 +38,10 @@ try {
   window.addEventListener("beforeunload", () => webMcp.dispose(), { once: true });
   createRoot(mount).render(
     <StrictMode>
-      <GameApp runtime={runtime} />
+      <WildGentApp runtime={runtime} webMcp={webMcp} />
     </StrictMode>,
   );
 } catch (error) {
   const message = error instanceof Error ? error.message : "The local field kit is unavailable.";
-  mount.innerHTML = `<main class="preflight"><div class="preflight-copy"><p class="signal-kicker"><span class="signal-dot"></span> Field kit error</p><h1>The map is still being<br><em>assembled.</em></h1><p class="preflight-dek">${message}</p></div></main>`;
+  mount.innerHTML = `<main class="landing-page preflight" data-testid="landing-page"><div class="preflight-copy"><p class="signal-kicker"><span class="signal-dot"></span> Field kit error</p><h1>The map is still being<br><em>assembled.</em></h1><p class="preflight-dek">${message}</p></div></main>`;
 }

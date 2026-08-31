@@ -74,6 +74,30 @@ export interface WebMcpPreflight {
   reason?: string;
 }
 
+export type WebMcpUiStatusPhase = "checking" | "ready" | "unavailable" | "attention";
+
+/** A safe, presentation-only description of a registration failure. */
+export interface WebMcpUiFailure {
+  readonly name: string;
+  readonly message: string;
+  readonly code?: string;
+}
+
+/**
+ * The app-facing WebMCP status. This intentionally contains no raw exception
+ * objects, stack traces, or registration details.
+ */
+export interface WebMcpUiStatus {
+  readonly phase: WebMcpUiStatusPhase;
+  readonly available: boolean;
+  readonly secureContext: boolean | undefined;
+  readonly originIsolated: boolean | undefined;
+  readonly registeredTools: readonly string[];
+  readonly failures: readonly WebMcpUiFailure[];
+}
+
+export type WebMcpStatusListener = (status: WebMcpUiStatus) => void;
+
 export interface RegistrationFailure {
   name: string;
   error: unknown;
