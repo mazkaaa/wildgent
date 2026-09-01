@@ -65,9 +65,14 @@ refusal while queries remain available.
 `WorldScene` is mounted only after gameplay leaves preflight. It creates the 10 by 7 tile map,
 landmark hit targets, a shared expedition marker, and camera. The selected-landmark state flows from
 `GameApp` through `setSnapshot(snapshot, selectedLandmark)` / `setSelectedLandmark`; the scene uses
-that seam only to highlight the selected landmark while authoritative position still comes from
-the snapshot. Direct movement interpolates for up to 600 ms, settles a promise when marker/camera
-presentation catches up, and snaps immediately for reduced motion.
+that seam to highlight the selected landmark and provide a smaller presentation-only camera pull,
+while authoritative position still comes from the snapshot. `cameraFrameFor` keeps the authored
+per-zone camera base and applies bounded horizontal pan with the player as the primary focus.
+Direct movement interpolates explicit marker and camera start/destination values on one shared eased
+timeline for up to 600 ms; the presentation gate settles only after both reach their destinations.
+Selection changes during travel retarget the active frame while preserving the gate promise, so the
+coordinator remains locked until the latest marker and camera destination settle. Reduced motion
+immediately applies the settled marker and camera frame.
 
 `presentationCuesForTransition` derives presentation-only camera, landmark, Resonance, capability,
 and battle-impact cues from snapshot transitions and activity actor metadata. The human marker stays

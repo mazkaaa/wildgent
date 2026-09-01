@@ -1,0 +1,51 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  CAMERA_PAN_BOUNDS,
+  cameraFrameFor,
+  easedPresentationProgress,
+} from "../rendering/world-scene";
+
+describe("authored camera framing", () => {
+  it("keeps player-led framing inside the authored pan bounds", () => {
+    const frame = cameraFrameFor({ zone: "camp", player: { x: 9, y: 6 } });
+
+    expect(frame.target.x).toBeCloseTo(-7.2 + CAMERA_PAN_BOUNDS.x);
+    expect(frame.target.z).toBeCloseTo(1.2 + CAMERA_PAN_BOUNDS.z);
+    expect(frame.position.y).toBe(11);
+  });
+
+  it("keeps the player primary while a selected landmark supplies a smaller pull", () => {
+    const player = { x: 4, y: 3 };
+    const playerFrame = cameraFrameFor({ zone: "ruins", player });
+    const selectedFrame = cameraFrameFor({
+      zone: "ruins",
+      player,
+      selectedLandmark: { x: 8, y: 6 },
+    });
+
+    expect(selectedFrame.target.x).toBeGreaterThan(playerFrame.target.x);
+    expect(selectedFrame.target.x - playerFrame.target.x).toBeLessThan(0.25 * (8 - 4) * 1.15);
+  });
+
+  it("uses one eased progress value for travel marker and camera", () => {
+    const progress = easedPresentationProgress(180, 360);
+    const markerStart = 0;
+    const markerDestination = 10;
+    const cameraStart = 4;
+    const cameraDestination = 14;
+
+    const marker = markerStart + (markerDestination - markerStart) * progress;
+    const camera = cameraStart + (cameraDestination - cameraStart) * progress;
+    expect(progress).toBeCloseTo(0.75);
+    expect((marker - markerStart) / (markerDestination - markerStart)).toBeCloseTo(
+      (camera - cameraStart) / (cameraDestination - cameraStart),
+    );
+  });
+
+  it("reaches the exact camera endpoint when motion settles immediately", () => {
+    expect(easedPresentationProgress(0, 0)).toBe(1);
+    expect(easedPresentationProgress(0, 600, true)).toBe(1);
+    expect(easedPresentationProgress(600, 600)).toBe(1);
+  });
+});

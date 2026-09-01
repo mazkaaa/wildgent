@@ -245,6 +245,26 @@ describe("ActionCoordinator", () => {
     expect(gate.isPending).toBe(false);
   });
 
+  it("retargets selection during travel without releasing the active presentation wait", async () => {
+    const gate = new PresentationGate();
+    const travel = gate.begin("camp:2:1:camp-beacon");
+    let settled = false;
+    void travel.then(() => {
+      settled = true;
+    });
+
+    const retargeted = gate.retarget("camp:2:1:relay-station");
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    expect(gate.key).toBe("camp:2:1:relay-station");
+    expect(retargeted).toBe(travel);
+
+    gate.settle();
+    await travel;
+    expect(settled).toBe(true);
+    expect(gate.isPending).toBe(false);
+  });
+
   it("derives world cues from authoritative transitions without changing the marker actor", () => {
     const previous: GameSnapshot = {
       ...INITIAL_SNAPSHOT,

@@ -128,6 +128,13 @@ export class PresentationGate {
     return this.pending !== null;
   }
 
+  /** Change the active presentation destination without releasing its waiting caller. */
+  retarget(key: string) {
+    if (!this.pending) return this.begin(key);
+    this.pending.key = key;
+    return this.pending.promise;
+  }
+
   begin(key: string) {
     if (this.pending?.key === key) return this.pending.promise;
     this.settle();
@@ -154,6 +161,90 @@ export class PresentationGate {
 /** Convert the engine's zero-based grid position into the low-poly world plane. */
 export const worldPositionFor = (position: GridPosition, zone: ZoneId) =>
   localPosition(position.x, position.y, zone);
+
+export type CameraPoint = { x: number; y: number; z: number };
+
+export type CameraFrame = {
+  position: CameraPoint;
+  target: CameraPoint;
+};
+
+export type CameraFramingInput = {
+  zone: ZoneId;
+  player: GridPosition;
+  selectedLandmark?: GridPosition | null;
+};
+
+/** Presentation-only horizontal pan limits. The camera remains an authored fixed-angle lens. */
+export const CAMERA_PAN_BOUNDS = { x: 3.2, z: 2.2 } as const;
+
+const CAMERA_PLAYER_WEIGHT = 0.78;
+const CAMERA_LANDMARK_WEIGHT = 1 - CAMERA_PLAYER_WEIGHT;
+const CAMERA_Z_OFFSET = 11;
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+/** Return the authored, zone-relative camera frame before player-led presentation pan. */
+const authoredCameraFrameForZone = (zone: ZoneId): CameraFrame => {
+  const offset = ZONE_OFFSETS[zone];
+  const authored = ZONE_CONTENT[zone].camera;
+  return {
+    position: {
+      x: offset.x + authored.x,
+      y: authored.y,
+      // Keep the existing authored elevation/composition while honoring all camera coordinates.
+      z: offset.z + authored.z - CAMERA_Z_OFFSET,
+    },
+    target: { x: offset.x, y: 0.35, z: offset.z },
+  };
+};
+
+/**
+ * Derive a bounded player-led camera frame without touching authoritative state. The player is
+ * the primary focus; an optional selected landmark supplies a deliberately smaller pull.
+ */
+export const cameraFrameFor = ({
+  zone,
+  player,
+  selectedLandmark = null,
+}: CameraFramingInput): CameraFrame => {
+  const base = authoredCameraFrameForZone(zone);
+  const zoneOrigin = ZONE_OFFSETS[zone];
+  const playerWorld = worldPositionFor(player, zone);
+  const landmarkWorld = selectedLandmark ? worldPositionFor(selectedLandmark, zone) : null;
+  const focusX = landmarkWorld
+    ? playerWorld.x * CAMERA_PLAYER_WEIGHT + landmarkWorld.x * CAMERA_LANDMARK_WEIGHT
+    : playerWorld.x;
+  const focusZ = landmarkWorld
+    ? playerWorld.z * CAMERA_PLAYER_WEIGHT + landmarkWorld.z * CAMERA_LANDMARK_WEIGHT
+    : playerWorld.z;
+  const panX = clamp(focusX - zoneOrigin.x, -CAMERA_PAN_BOUNDS.x, CAMERA_PAN_BOUNDS.x);
+  const panZ = clamp(focusZ - zoneOrigin.z, -CAMERA_PAN_BOUNDS.z, CAMERA_PAN_BOUNDS.z);
+
+  return {
+    position: {
+      x: base.position.x + panX,
+      y: base.position.y,
+      z: base.position.z + panZ,
+    },
+    target: {
+      x: base.target.x + panX,
+      y: base.target.y,
+      z: base.target.z + panZ,
+    },
+  };
+};
+
+/** Shared easing keeps the marker and camera on the exact same presentation timeline. */
+export const easedPresentationProgress = (
+  elapsed: number,
+  duration: number,
+  reducedMotion = false,
+) => {
+  if (reducedMotion || duration <= 0) return 1;
+  const progress = Math.min(1, Math.max(0, elapsed / Math.max(duration, 1)));
+  return progress * (2 - progress);
+};
 
 const material = (color: number, roughness = 0.88, emissive = 0x000000) =>
   new THREE.MeshStandardMaterial({
@@ -543,6 +634,8 @@ export class WorldScene {
   private previousSnapshot: GameSnapshot | null = null;
   private markerDestination = new THREE.Vector3();
   private markerStart = new THREE.Vector3();
+  private cameraStart = new THREE.Vector3();
+  private lookStart = new THREE.Vector3();
   private markerStartedAt = 0;
   private markerDuration = 0;
   private readonly presentationGate = new PresentationGate();
@@ -609,11 +702,25 @@ export class WorldScene {
         : selectedLandmark;
     this.selectedLandmarkOverride = presentationSelection;
     const target = worldPositionFor(snapshot.position, snapshot.zone);
-    const key = `${snapshot.zone}:${snapshot.position.x}:${snapshot.position.y}`;
+    const key = `${snapshot.zone}:${snapshot.position.x}:${snapshot.position.y}:${presentationSelection ?? ""}`;
     if (snapshot.zone !== this.activeZone) {
       this.activeZone = snapshot.zone;
-      this.setCameraForZone(snapshot.zone);
     }
+    const selectedContent = presentationSelection
+      ? LANDMARK_CONTENT.get(presentationSelection)
+      : undefined;
+    const cameraFrame = cameraFrameFor({
+      zone: snapshot.zone,
+      player: snapshot.position,
+      selectedLandmark:
+        selectedContent?.zone === snapshot.zone ? selectedContent.position : undefined,
+    });
+    this.cameraDestination.set(
+      cameraFrame.position.x,
+      cameraFrame.position.y,
+      cameraFrame.position.z,
+    );
+    this.lookDestination.set(cameraFrame.target.x, cameraFrame.target.y, cameraFrame.target.z);
     this.updateLandmarkPresentation(snapshot, presentationSelection);
     this.setMarkerActor(snapshot);
     const cuePromises = presentationCuesForTransition(this.previousSnapshot, snapshot).map((cue) =>
@@ -630,27 +737,33 @@ export class WorldScene {
       return Promise.all(cuePromises).then(() => undefined);
     }
     if (this.presentationGate.key === key) return this.presentationGate.begin(key);
-    this.presentationGate.settle();
-    if (
-      this.expeditionMarker.position.x === target.x &&
-      this.expeditionMarker.position.z === target.z
-    ) {
+    this.markerStart.copy(this.expeditionMarker.position);
+    this.markerDestination.set(target.x, 0.03, target.z);
+    this.cameraStart.copy(this.camera.position);
+    this.lookStart.copy(this.cameraTarget);
+    const markerDistance = this.markerStart.distanceTo(this.markerDestination);
+    const cameraDistance = this.cameraStart.distanceTo(this.cameraDestination);
+    const lookDistance = this.lookStart.distanceTo(this.lookDestination);
+    const presentationDistance = Math.max(markerDistance, cameraDistance, lookDistance);
+    if (presentationDistance < 0.0001) {
+      this.presentationGate.settle();
       return Promise.all(cuePromises).then(() => undefined);
     }
 
     const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-    this.markerStart.copy(this.expeditionMarker.position);
-    this.markerDestination.set(target.x, 0.03, target.z);
     if (reduced) {
       this.expeditionMarker.position.copy(this.markerDestination);
       this.camera.position.copy(this.cameraDestination);
       this.cameraTarget.copy(this.lookDestination);
+      this.presentationGate.settle();
       return Promise.all(cuePromises).then(() => undefined);
     }
-    const distance = this.markerStart.distanceTo(this.markerDestination);
-    this.markerDuration = Math.min(600, Math.max(140, distance * 180));
+    this.markerDuration = Math.min(600, Math.max(140, presentationDistance * 180));
     this.markerStartedAt = performance.now();
-    return Promise.all([this.presentationGate.begin(key), ...cuePromises]).then(() => undefined);
+    const presentation = this.presentationGate.isPending
+      ? this.presentationGate.retarget(key)
+      : this.presentationGate.begin(key);
+    return Promise.all([presentation, ...cuePromises]).then(() => undefined);
   }
 
   /** Play an authored in-world cue. Reduced-motion users receive the settled presentation. */
@@ -1438,13 +1551,9 @@ export class WorldScene {
   }
 
   private setCameraForZone(zone: ZoneId) {
-    const offset = ZONE_OFFSETS[zone];
-    this.cameraDestination.set(
-      offset.x,
-      ZONE_CONTENT[zone].camera.y,
-      offset.z + ZONE_CONTENT[zone].camera.z - 11,
-    );
-    this.lookDestination.set(offset.x, 0.35, offset.z);
+    const frame = authoredCameraFrameForZone(zone);
+    this.cameraDestination.set(frame.position.x, frame.position.y, frame.position.z);
+    this.lookDestination.set(frame.target.x, frame.target.y, frame.target.z);
   }
 
   private handlePointerDown = (event: PointerEvent) => {
@@ -1493,17 +1602,20 @@ export class WorldScene {
   private animate = () => {
     this.frame = requestAnimationFrame(this.animate);
     const elapsed = this.clock.getElapsedTime();
+    const now = performance.now();
     const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
     if (this.presentationGate.isPending) {
-      const elapsed = performance.now() - this.markerStartedAt;
-      const progress = Math.min(1, elapsed / this.markerDuration);
-      const eased = progress * (2 - progress);
-      this.expeditionMarker.position.lerpVectors(this.markerStart, this.markerDestination, eased);
-      if (progress >= 1) {
+      if (reduced) {
         this.expeditionMarker.position.copy(this.markerDestination);
         this.camera.position.copy(this.cameraDestination);
         this.cameraTarget.copy(this.lookDestination);
         this.presentationGate.settle();
+      } else {
+        const eased = easedPresentationProgress(now - this.markerStartedAt, this.markerDuration);
+        this.expeditionMarker.position.lerpVectors(this.markerStart, this.markerDestination, eased);
+        this.camera.position.lerpVectors(this.cameraStart, this.cameraDestination, eased);
+        this.cameraTarget.lerpVectors(this.lookStart, this.lookDestination, eased);
+        if (eased >= 1) this.presentationGate.settle();
       }
     }
     if (this.markerPulseUntil > 0) {
@@ -1511,7 +1623,7 @@ export class WorldScene {
         this.markerPulseUntil = 0;
         this.expeditionMarker.scale.setScalar(1);
       } else {
-        const pulseProgress = Math.max(0, this.markerPulseUntil - performance.now()) / 520;
+        const pulseProgress = Math.max(0, this.markerPulseUntil - now) / 520;
         this.expeditionMarker.scale.setScalar(1 + Math.sin(pulseProgress * Math.PI) * 0.14);
         if (pulseProgress === 0) {
           this.markerPulseUntil = 0;
@@ -1520,7 +1632,7 @@ export class WorldScene {
       }
     }
     for (const effect of this.transientEffects) {
-      const progress = Math.min(1, (performance.now() - effect.startedAt) / effect.duration);
+      const progress = Math.min(1, (now - effect.startedAt) / effect.duration);
       effect.group.scale.setScalar(0.72 + progress * 0.68);
       effect.group.rotation.y += reduced ? 0 : 0.018;
       effect.group.traverse((object) => {
@@ -1556,8 +1668,6 @@ export class WorldScene {
       entry.object.position.y = entry.object.userData.baseY + y;
       entry.object.rotation.y += reduced ? 0 : 0.003 * entry.speed;
     }
-    this.camera.position.lerp(this.cameraDestination, reduced ? 0.14 : 0.055);
-    this.cameraTarget.lerp(this.lookDestination, reduced ? 0.14 : 0.055);
     this.camera.lookAt(this.cameraTarget);
     this.renderer.render(this.scene, this.camera);
   };
