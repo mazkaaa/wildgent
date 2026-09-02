@@ -11,7 +11,8 @@ Use Node.js 22 or newer and npm 10.9.8 or newer. The root npm workspace contains
 - `npm run check` runs Biome, both package typechecks, and Vitest suites.
 - `npm run build` builds all Turbo workspaces for production.
 - `npm test` runs all Vitest suites.
-- `npm run test:e2e` runs Chromium Playwright journeys for the game app.
+- `npm run test:e2e` runs the desktop Chromium Playwright journeys serially in one worker to limit
+  local CPU and memory use.
 - `npm run format` applies Biome formatting; inspect the diff before keeping changes.
 - Deploy with `npm run build` followed by `npm run deploy`; Wrangler publishes the existing `dist/`
   output as Cloudflare static assets.
@@ -23,7 +24,7 @@ and objective tests are in `apps/game/src/tests/app-model.test.ts`; coordinator 
 tests are in `coordinator.test.ts`; WebMCP registration and tool behavior are in
 `apps/game/src/webmcp/index.test.ts`. Browser journeys live in
 `apps/game/src/tests/e2e/journey.spec.ts` and use `localStorage.removeItem` in test setup for clean
-fixtures. These Playwright journeys cover manual UI flows; WebMCP adapter behavior is unit-tested,
+fixtures. These Playwright journeys cover the desktop manual UI flow; WebMCP adapter behavior is unit-tested,
 but external-agent WebMCP E2E is not automated and must be verified separately in a supported
 browser.
 

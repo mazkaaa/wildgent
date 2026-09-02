@@ -18,7 +18,8 @@ recedes whenever the player is moving or a major world event is playing.
 
 ## Game Composition
 
-- Full-bleed world canvas with fixed elevated authored camera and smooth zone transitions.
+- Full-bleed world canvas with a fixed elevated authored camera, responsive narrow-aspect framing,
+  and smooth zone transitions.
 - Objective at top-left; directive and pause controls at top-right; party at bottom-left; contextual
   interaction prompt at bottom-center; collapsed adventure-log handle at the right edge.
 - Temporary notifications appear near the upper center and never cover the controlled character or
@@ -47,5 +48,8 @@ recedes whenever the player is moving or a major world event is playing.
 
 ## Responsive Boundary
 
-Desktop gameplay begins at 1024px. Smaller viewports show a polished static expedition view that
-explains keyboard-and-mouse requirements; do not compress the complete HUD into mobile cards.
+Gameplay is available from 320px upward for keyboard-and-mouse play. At narrow widths, retain the
+world as the primary surface: compact secondary HUD details, make landmark choices scrollable, and
+keep the action and battle controls reachable without turning the HUD into dashboard cards. The
+camera preserves the authored horizontal world coverage by opening its projection, then retreating
+only when its narrow-screen lens ceiling is reached.

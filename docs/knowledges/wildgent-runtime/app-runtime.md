@@ -68,6 +68,10 @@ landmark hit targets, a shared expedition marker, and camera. The selected-landm
 that seam to highlight the selected landmark and provide a smaller presentation-only camera pull,
 while authoritative position still comes from the snapshot. `cameraFrameFor` keeps the authored
 per-zone camera base and applies bounded horizontal pan with the player as the primary focus.
+`responsiveCameraFrameFor` then adapts that presentation frame to the canvas aspect: narrow views
+preserve desktop horizontal coverage by opening the vertical field of view up to a ceiling and
+retreating along the target vector only if necessary. It changes neither authoritative state nor the
+camera target used by pointer raycasts.
 Direct movement interpolates explicit marker and camera start/destination values on one shared eased
 timeline for up to 600 ms; the presentation gate settles only after both reach their destinations.
 Selection changes during travel retarget the active frame while preserving the gate promise, so the
@@ -80,3 +84,7 @@ ember-stable; human/system/Echo activity is shown through ember/gold/cyan transi
 `prefers-reduced-motion: reduce` is the boundary for presentation only: it disables interpolation,
 pulsing, rotation, bobbing, and cue animation while retaining settled world state and cues. It does
 not change engine rules, WebMCP behavior, or the manual interaction contract.
+
+Gameplay remains mounted from 320px upward. The HUD progressively compacts and horizontally scrolls
+landmark choices at narrow widths, but keyboard and mouse remain the manual control contract; no
+touch movement control is registered.

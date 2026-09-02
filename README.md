@@ -50,7 +50,7 @@ Quality checks:
 ```bash
 npm run check
 npm run build
-npm run test:e2e
+npm run test:e2e # one serialized desktop Chromium journey suite
 ```
 
 ## WebMCP setup
@@ -58,16 +58,67 @@ npm run test:e2e
 WildGent uses the native imperative WebMCP interface, `document.modelContext`.
 The game remains manually playable when the interface is unavailable.
 
-Local Chrome testing currently requires the WebMCP testing flag:
+### Codex built-in browser
+
+For direct local Site-tool discovery, use the current ChatGPT desktop app with
+Codex on GPT-5.6 Sol or GPT-5.6 Terra. GPT-5.6 Luna is not the supported model
+for this workflow.
+
+1. From the repository root, run `npm run dev`.
+2. In Codex, use `@Browser` to open `http://127.0.0.1:5173/`.
+3. From the landing page, start a new journey, continue a saved journey, or
+   choose **Judge Demo**. Follow that flow to the `/play` gameplay page.
+4. On the open `/play` page, inspect **Site tools** and verify that **Echo
+   Link** is available.
+5. Wait for the Site tools to appear, then call `get_game_state` followed by
+   `look_around`. Use the returned visible semantic target IDs for any later
+   actions.
+
+The external gameplay agent connects through the open browser page. There is no
+MCP server to start and no MCP server/config file to create for this flow.
+
+### Manual Chrome and hosted acceptance
+
+For a local Chrome preflight, enable the WebMCP testing flag before opening the
+game:
 
 1. Open `chrome://flags/#enable-webmcp-testing`.
 2. Enable the flag and relaunch Chrome.
-3. Open the local WildGent origin using the supported WebMCP-capable agent.
-4. Confirm the in-game preflight reports that tool registration is available.
+3. Run `npm run dev` and open `http://127.0.0.1:5173/` in Chrome. From the
+   landing page, start a new journey, continue a saved journey, or choose
+   **Judge Demo** to reach the `/play` gameplay page.
+4. Confirm the in-game preflight reports that Echo Link and tool registration
+   are available.
 
-Hosted acceptance must use HTTPS and the event-supported Chrome/WebMCP origin
-trial or preview environment. Mocked browser tests verify the adapter contract,
-but do not prove that an external agent can discover and invoke tools.
+This local check is only a browser/API preflight. A local ready status, a mock,
+or a Playwright/Vitest adapter test does not prove that an external agent can
+discover or invoke the Site tools.
+
+Hosted acceptance is a separate gate: use the deployed HTTPS page with the
+event-supported WebMCP origin trial/preview environment and a compatible
+external agent. Verify discovery and invocation there with the actual open
+browser page. Hosted verification has not been claimed or completed here.
+
+Browser-extension control is a separate browser-automation path; it is not
+WebMCP Site-tool discovery or invocation.
+
+### Echo agent briefing
+
+Copy this briefing into the external gameplay agent:
+
+```text
+You are Echo in WildGent. Use the Site tools exposed by the open browser page;
+do not look for an MCP server or config file. Wait until the tools are
+registered, then invoke get_game_state and look_around first. Use only tools
+that are actually registered; for target-taking tools, use only their semantic
+target IDs and never invent coordinates, hidden IDs, or future solutions. After
+every write, call get_game_state again before choosing the next action. Respect
+HUMAN_DISCOVERY_REQUIRED,
+DIRECTIVE_BLOCKED, and BUSY: stop for the human when discovery is required,
+never change the human-owned Avoid battles directive or start a blocked battle,
+and wait/re-read state when the game is busy. The interface tool should only be
+expected after Voltyn Resonance makes it available.
+```
 
 ## Judge Demo
 

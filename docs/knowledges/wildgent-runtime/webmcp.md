@@ -41,13 +41,41 @@ signals return `CANCELLED`; malformed inputs return `INVALID_INPUT`; engine refu
 structured code and message, including `BUSY`, `OUT_OF_RANGE`, `DIRECTIVE_BLOCKED`, and
 `HUMAN_DISCOVERY_REQUIRED`.
 
-## Browser and hosting boundary
+## Operator connection and discovery
+
+The external gameplay agent is connected through the open browser page that exposes the native
+`document.modelContext` Site tools. It is not connected through an MCP server, an MCP server
+configuration file, or a second game-state service.
+
+For the built-in Codex browser workflow, use the current ChatGPT desktop app with GPT-5.6 Sol or
+GPT-5.6 Terra, not GPT-5.6 Luna. Run `npm run dev`, use `@Browser` to open
+`http://127.0.0.1:5173/`, and start a new journey, continue a saved journey, or choose **Judge
+Demo**. Follow that flow to the `/play` gameplay page, then inspect **Site tools** and verify
+**Echo Link**. Wait for the tools to be available, then call `get_game_state` and `look_around` in
+that order before taking action.
+
+The manual local preflight is different:
+
+1. Open `chrome://flags/#enable-webmcp-testing` in Chrome.
+2. Enable the flag and relaunch Chrome.
+3. Run `npm run dev` and open `http://127.0.0.1:5173/` in Chrome. From the landing page, start a
+   new journey, continue a saved journey, or choose **Judge Demo** to reach `/play`.
+4. Confirm the in-game Echo Link status and registered tools.
+
+This only checks local browser/API availability. A local status, mock, Vitest test, or Playwright
+adapter test does not establish external-agent Site-tool discovery or invocation. Hosted acceptance
+must be performed separately against the deployed HTTPS page using the event-supported WebMCP
+origin-trial/preview environment and a compatible external agent. This repository does not claim
+that hosted verification has passed.
+
+Browser-extension control is a separate browser-automation mechanism and is not WebMCP Site-tool
+discovery.
+
+## Runtime boundary
 
 The integration is imperative and native: it does not create a server or a second game state.
-Local testing requires a WebMCP-capable Chrome testing flag when available. Hosted acceptance needs
-HTTPS and the event-supported WebMCP origin-trial or preview environment. Vitest mocks verify the
-registration and adapter contract; only a real supported browser/agent proves external discovery
-and invocation.
+Unsupported browsers remain fully playable through the human interface, and the app reports
+sanitized WebMCP status rather than exposing raw browser exceptions.
 
 ## Verify changes
 

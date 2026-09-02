@@ -6,7 +6,9 @@ export default defineConfig({
   expect: {
     timeout: 5_000,
   },
-  fullyParallel: true,
+  // Keep local and CI runs to one browser process; Three.js scenes are resource-intensive.
+  fullyParallel: false,
+  workers: 1,
   reporter: "line",
   use: {
     baseURL: "http://127.0.0.1:5173",
@@ -17,5 +19,5 @@ export default defineConfig({
     url: "http://127.0.0.1:5173",
     reuseExistingServer: true,
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [{ name: "desktop-chromium", use: { ...devices["Desktop Chrome"] } }],
 });

@@ -975,20 +975,6 @@ export function GameApp({
           />
         ) : null}
       </div>
-      <section
-        className="desktop-required"
-        data-testid="desktop-required"
-        aria-labelledby="desktop-required-title"
-      >
-        <div className="desktop-required-mark" aria-hidden="true">
-          W
-        </div>
-        <h1 id="desktop-required-title">The field needs a wider view.</h1>
-        <p>
-          WildGent is built for keyboard-and-mouse play on a desktop screen. Reopen this expedition
-          at 1024px or wider to enter the living world.
-        </p>
-      </section>
     </main>
   );
 }
@@ -1220,6 +1206,56 @@ function FieldGuideDrawer({
               Echo Link is optional infrastructure. If this browser does not support it, the human
               journey remains fully playable and no objective is blocked.
             </p>
+            <div className="guide-connect">
+              <h3>Connect Echo</h3>
+              <p className="guide-connect-lede">
+                Primary path: use the current ChatGPT desktop app with GPT-5.6 Sol or Terra.
+              </p>
+              <ol className="guide-connect-steps">
+                <li>
+                  <strong>Open the field</strong>
+                  <span>
+                    Use <code>@Browser</code> to open the local <code>/play</code> page.
+                  </span>
+                </li>
+                <li>
+                  <strong>Invite Echo in</strong>
+                  <span>
+                    Inspect Site tools, then ask Echo to call <code>get_game_state</code> followed
+                    by <code>look_around</code>.
+                  </span>
+                </li>
+              </ol>
+              <p className="guide-capability-note" data-testid="echo-capability-note" role="status">
+                <strong>Capability gate</strong> The <code>interface</code> capability unlocks only
+                after Voltyn Resonance.
+                {snapshot.flags.resonanceCalibrated
+                  ? " Voltyn Resonance is complete; Echo can use it now."
+                  : " It is still locked, but no gameplay objective is blocked."}
+              </p>
+              <a
+                className="guide-readme-link"
+                href="https://github.com/mazkaaa/wildgent#webmcp-setup"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Read the README WebMCP setup guide
+              </a>
+              <details className="guide-connection-details">
+                <summary>Technical connection notes</summary>
+                <div className="guide-connection-body">
+                  <p>
+                    For a manual Chrome local preflight, enable
+                    <code>chrome://flags/#enable-webmcp-testing</code>, relaunch Chrome, and confirm
+                    the in-game preflight reports that tool registration is available.
+                  </p>
+                  <p>
+                    Hosted acceptance is separate: it still requires HTTPS, the supported WebMCP
+                    origin trial, and a compatible external agent.
+                  </p>
+                </div>
+              </details>
+            </div>
             <details className="guide-judge-details" open={guideJudgeOpen} onToggle={onJudgeToggle}>
               <summary>Judge Demo details</summary>
               <div className="guide-judge-body">

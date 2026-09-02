@@ -4,6 +4,8 @@ import {
   CAMERA_PAN_BOUNDS,
   cameraFrameFor,
   easedPresentationProgress,
+  RESPONSIVE_CAMERA_FOV_CEILING,
+  responsiveCameraFrameFor,
 } from "../rendering/world-scene";
 
 describe("authored camera framing", () => {
@@ -47,5 +49,32 @@ describe("authored camera framing", () => {
     expect(easedPresentationProgress(0, 0)).toBe(1);
     expect(easedPresentationProgress(0, 600, true)).toBe(1);
     expect(easedPresentationProgress(600, 600)).toBe(1);
+  });
+
+  it("keeps the desktop camera unchanged at its authored aspect", () => {
+    const frame = cameraFrameFor({ zone: "camp", player: { x: 1, y: 1 } });
+    const responsive = responsiveCameraFrameFor(frame, 16 / 9);
+
+    expect(responsive.fov).toBe(35);
+    expect(responsive.distanceScale).toBe(1);
+    expect(responsive.position).toEqual(frame.position);
+  });
+
+  it("opens the projection before reaching the narrow-screen ceiling", () => {
+    const frame = cameraFrameFor({ zone: "ruins", player: { x: 4, y: 3 } });
+    const responsive = responsiveCameraFrameFor(frame, 4 / 3);
+
+    expect(responsive.fov).toBeGreaterThan(35);
+    expect(responsive.fov).toBeLessThan(RESPONSIVE_CAMERA_FOV_CEILING);
+    expect(responsive.distanceScale).toBeCloseTo(1);
+  });
+
+  it("caps the portrait-phone lens and retreats the camera for remaining width", () => {
+    const frame = cameraFrameFor({ zone: "core", player: { x: 8, y: 5 } });
+    const responsive = responsiveCameraFrameFor(frame, 320 / 568);
+
+    expect(responsive.fov).toBe(RESPONSIVE_CAMERA_FOV_CEILING);
+    expect(responsive.distanceScale).toBeGreaterThan(1);
+    expect(responsive.target).toEqual(frame.target);
   });
 });

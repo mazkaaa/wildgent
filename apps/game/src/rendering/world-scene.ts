@@ -175,14 +175,59 @@ export type CameraFramingInput = {
   selectedLandmark?: GridPosition | null;
 };
 
+export type ResponsiveCameraFrame = CameraFrame & {
+  fov: number;
+  distanceScale: number;
+};
+
 /** Presentation-only horizontal pan limits. The camera remains an authored fixed-angle lens. */
 export const CAMERA_PAN_BOUNDS = { x: 3.2, z: 2.2 } as const;
 
 const CAMERA_PLAYER_WEIGHT = 0.78;
 const CAMERA_LANDMARK_WEIGHT = 1 - CAMERA_PLAYER_WEIGHT;
 const CAMERA_Z_OFFSET = 11;
+const AUTHORED_CAMERA_FOV = 35;
+const AUTHORED_CAMERA_ASPECT = 16 / 9;
+export const RESPONSIVE_CAMERA_FOV_CEILING = 58;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+const degrees = (radiansValue: number) => (radiansValue * 180) / Math.PI;
+const radians = (degreesValue: number) => (degreesValue * Math.PI) / 180;
+
+/**
+ * Preserve the authored 16:9 horizontal view when a narrow viewport would otherwise crop the
+ * expedition. The lens opens first; once it reaches its comfortable ceiling, the camera retreats
+ * along its authored target vector. This is presentation-only and never changes game state.
+ */
+export const responsiveCameraFrameFor = (
+  frame: CameraFrame,
+  aspect: number,
+): ResponsiveCameraFrame => {
+  const safeAspect = Math.max(aspect, 0.01);
+  if (safeAspect >= AUTHORED_CAMERA_ASPECT) {
+    return { ...frame, fov: AUTHORED_CAMERA_FOV, distanceScale: 1 };
+  }
+  const authoredHorizontalFov =
+    2 * Math.atan(Math.tan(radians(AUTHORED_CAMERA_FOV / 2)) * AUTHORED_CAMERA_ASPECT);
+  const matchingVerticalFov = degrees(
+    2 * Math.atan(Math.tan(authoredHorizontalFov / 2) / safeAspect),
+  );
+  const fov = Math.min(matchingVerticalFov, RESPONSIVE_CAMERA_FOV_CEILING);
+  const distanceScale =
+    Math.tan(authoredHorizontalFov / 2) / (Math.tan(radians(fov / 2)) * safeAspect);
+
+  return {
+    fov,
+    distanceScale,
+    position: {
+      x: frame.target.x + (frame.position.x - frame.target.x) * distanceScale,
+      y: frame.target.y + (frame.position.y - frame.target.y) * distanceScale,
+      z: frame.target.z + (frame.position.z - frame.target.z) * distanceScale,
+    },
+    target: { ...frame.target },
+  };
+};
 
 /** Return the authored, zone-relative camera frame before player-led presentation pan. */
 const authoredCameraFrameForZone = (zone: ZoneId): CameraFrame => {
@@ -618,6 +663,8 @@ export class WorldScene {
   private activeZone: ZoneId = "camp";
   private cameraTarget = new THREE.Vector3();
   private cameraDestination = new THREE.Vector3();
+  private authoredCameraFrame: CameraFrame = authoredCameraFrameForZone("camp");
+  private viewportAspect = 1;
   private lookDestination = new THREE.Vector3();
   private readonly onLandmarkClick?: LandmarkClick;
   private readonly onHumanSignalClick?: HumanSignalClick;
@@ -655,7 +702,7 @@ export class WorldScene {
     this.onLandmarkClick = options.onLandmarkClick;
     this.onHumanSignalClick = options.onHumanSignalClick;
     this.onCellClick = options.onCellClick;
-    this.camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
+    this.camera = new THREE.PerspectiveCamera(AUTHORED_CAMERA_FOV, 1, 0.1, 100);
     this.camera.position.set(0, 10, 14);
     this.cameraTarget.set(0, 0, 0);
     this.camera.lookAt(this.cameraTarget);
@@ -715,12 +762,7 @@ export class WorldScene {
       selectedLandmark:
         selectedContent?.zone === snapshot.zone ? selectedContent.position : undefined,
     });
-    this.cameraDestination.set(
-      cameraFrame.position.x,
-      cameraFrame.position.y,
-      cameraFrame.position.z,
-    );
-    this.lookDestination.set(cameraFrame.target.x, cameraFrame.target.y, cameraFrame.target.z);
+    this.setResponsiveCameraDestination(cameraFrame);
     this.updateLandmarkPresentation(snapshot, presentationSelection);
     this.setMarkerActor(snapshot);
     const cuePromises = presentationCuesForTransition(this.previousSnapshot, snapshot).map((cue) =>
@@ -851,7 +893,13 @@ export class WorldScene {
 
   resize(width: number, height: number) {
     const safeHeight = Math.max(height, 1);
-    this.camera.aspect = Math.max(width, 1) / safeHeight;
+    this.viewportAspect = Math.max(width, 1) / safeHeight;
+    this.setResponsiveCameraDestination(this.authoredCameraFrame);
+    if (!this.presentationGate.isPending) {
+      this.camera.position.copy(this.cameraDestination);
+      this.cameraTarget.copy(this.lookDestination);
+    }
+    this.camera.aspect = this.viewportAspect;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(Math.max(width, 1), safeHeight, false);
   }
@@ -1551,9 +1599,15 @@ export class WorldScene {
   }
 
   private setCameraForZone(zone: ZoneId) {
-    const frame = authoredCameraFrameForZone(zone);
-    this.cameraDestination.set(frame.position.x, frame.position.y, frame.position.z);
-    this.lookDestination.set(frame.target.x, frame.target.y, frame.target.z);
+    this.setResponsiveCameraDestination(authoredCameraFrameForZone(zone));
+  }
+
+  private setResponsiveCameraDestination(frame: CameraFrame) {
+    this.authoredCameraFrame = frame;
+    const responsive = responsiveCameraFrameFor(frame, this.viewportAspect);
+    this.camera.fov = responsive.fov;
+    this.cameraDestination.set(responsive.position.x, responsive.position.y, responsive.position.z);
+    this.lookDestination.set(responsive.target.x, responsive.target.y, responsive.target.z);
   }
 
   private handlePointerDown = (event: PointerEvent) => {

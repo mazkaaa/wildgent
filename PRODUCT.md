@@ -8,7 +8,7 @@ web
 
 ## Users
 
-Hackathon judges and players experiencing a short desktop adventure with an external AI companion.
+Hackathon judges and players experiencing a short responsive browser adventure with an external AI companion.
 They should understand the human-and-AI cooperation by playing, not by reading technical panels.
 
 ## Product Purpose
@@ -24,8 +24,9 @@ reason and act through WebMCP, while human-only discovery and directives remain 
 
 ## Operating Context
 
-The game runs in a desktop browser with keyboard and mouse. Conversation with Echo remains in the
-supported external agent. The hosted build requires HTTPS and a supported WebMCP environment.
+The game runs in a responsive browser viewport with keyboard and mouse. Conversation with Echo
+remains in the supported external agent. The hosted build requires HTTPS and a supported WebMCP
+environment.
 
 ## Capabilities and Constraints
 
@@ -35,8 +36,8 @@ supported external agent. The hosted build requires HTTPS and a supported WebMCP
 - Manual controls and WebMCP use the same command path.
 - Preserve `HUMAN_DISCOVERY_REQUIRED`, `DIRECTIVE_BLOCKED`, dynamic `interface` registration,
   persistence, checkpoints, and the current chapter content.
-- Desktop gameplay is supported at 1024px and wider; smaller screens receive a deliberate desktop
-  requirement screen.
+- Gameplay reflows from 320px upward. Keyboard and mouse remain the required manual input model;
+  touch movement controls are not part of this chapter.
 - Exact WebMCP telemetry is opt-in diagnostics, not normal game presentation.
 
 ## Brand Commitments

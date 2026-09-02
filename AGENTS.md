@@ -17,7 +17,7 @@ npm run dev                 # start the game at the Vite dev server
 npm run check               # Biome check, typecheck, and unit tests
 npm run build               # build all Turbo workspaces
 npm test                    # run Vitest suites
-npm run test:e2e            # run Chromium Playwright journeys
+npm run test:e2e            # run one serialized desktop Chromium Playwright journey suite
 npm run format              # format the repository with Biome
 ```
 
@@ -27,7 +27,7 @@ Use TypeScript and two-space indentation; Biome enforces spaces, a 100-column li
 
 ## Testing Guidelines
 
-Vitest covers engine, coordinator, app-model, and WebMCP adapter behavior. Playwright covers browser journeys. Add focused `*.test.ts` tests for domain changes and `*.spec.ts` tests for end-to-end flows; run `npm run check` before submitting. No coverage threshold is configured, so exercise every changed branch, especially refusal and progression paths.
+Vitest covers engine, coordinator, app-model, and WebMCP adapter behavior. Playwright covers desktop browser journeys in one serialized Chromium worker to limit local CPU and memory use. Add focused `*.test.ts` tests for domain changes and `*.spec.ts` tests for end-to-end flows; run `npm run check` before submitting. No coverage threshold is configured, so exercise every changed branch, especially refusal and progression paths.
 
 ## Architecture & WebMCP Boundaries
 

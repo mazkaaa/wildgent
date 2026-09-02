@@ -110,9 +110,33 @@ test.describe("WildGent manual expedition", () => {
     await expect(grid).toHaveText("01 · 01");
     await page.keyboard.press("ArrowRight");
     await expect(grid).toHaveText("02 · 01");
-    await expect(page.getByText("ready", { exact: true })).toBeVisible();
     await page.keyboard.press("ArrowLeft");
     await expect(grid).toHaveText("01 · 01");
+  });
+
+  test("keeps the expedition playable and contained after a narrow viewport resize", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await startAndDismissCoach(page, "start-journey");
+    await page.setViewportSize({ width: 320, height: 568 });
+
+    await expect(page.getByTestId("desktop-required")).toHaveCount(0);
+    const canvas = page.locator("canvas.world-canvas");
+    await expect(canvas).toBeVisible();
+    await expect
+      .poll(() => canvas.evaluate((element) => (element as HTMLCanvasElement).width))
+      .toBeGreaterThan(300);
+
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByTestId("grid-position")).toHaveText("02 · 01");
+
+    const viewport = page.viewportSize();
+    const actionBox = await page.getByTestId("landmark-action").boundingBox();
+    if (!viewport || !actionBox) throw new Error("Responsive action prompt did not render.");
+    expect(actionBox.x).toBeGreaterThanOrEqual(0);
+    expect(actionBox.x + actionBox.width).toBeLessThanOrEqual(viewport.width);
+    expect(actionBox.y + actionBox.height).toBeLessThanOrEqual(viewport.height);
   });
 
   test("queues rapid physical taps and ignores browser repeat events", async ({ page }) => {
@@ -172,7 +196,7 @@ test.describe("WildGent manual expedition", () => {
     // This is intentionally a human-facing control; the agent receives a structured refusal for
     // the same discovery through WebMCP.
     await clickLandmarkAction(page, RUINS_LANDMARKS.vines);
-    await expect(page.getByText("Human lens open")).toBeVisible();
+    await expect(page.getByTestId("landmark-ruins-vines")).toHaveClass(/is-complete/);
     // Discovery is human-only; approach the sigil again before the agent capability acts on it.
     await clickLandmarkAction(page, RUINS_LANDMARKS.door);
 
@@ -240,7 +264,7 @@ test.describe("WildGent manual expedition", () => {
 
   test("reopens the player guide from the HUD and exposes Echo Link details", async ({ page }) => {
     await page.goto("/");
-    await startAndDismissCoach(page, "start-journey");
+    await startAndDismissCoach(page, "start-judge-demo");
     await expect(page.getByTestId("echo-link-status")).toBeVisible();
     await page.getByTestId("open-field-guide").click();
     const guide = page.getByTestId("field-guide-drawer");
@@ -248,13 +272,47 @@ test.describe("WildGent manual expedition", () => {
     await expect(guide.getByText("How to Play")).toBeVisible();
     await expect(guide.getByText("Human + Echo")).toBeVisible();
     await expect(guide.locator("summary").filter({ hasText: "Echo Link" })).toBeVisible();
+    await expect(guide.getByText("Connect Echo", { exact: true })).toBeVisible();
+    const connectionGuide = guide.locator(".guide-connect");
+    await expect(connectionGuide).toContainText(
+      "current ChatGPT desktop app with GPT-5.6 Sol or Terra",
+    );
+    await expect(connectionGuide).toContainText("Use @Browser to open the local /play page");
+    await expect(connectionGuide).toContainText(
+      "Inspect Site tools, then ask Echo to call get_game_state followed by look_around",
+    );
+    await expect(guide.getByTestId("echo-capability-note")).toContainText(
+      "interface capability unlocks only after Voltyn Resonance",
+    );
+    await expect(guide.getByTestId("echo-capability-note")).toContainText(
+      "no gameplay objective is blocked",
+    );
+    await expect(
+      guide.getByRole("link", { name: "Read the README WebMCP setup guide" }),
+    ).toHaveAttribute("href", "https://github.com/mazkaaa/wildgent#webmcp-setup");
+    await guide.getByText("Technical connection notes", { exact: true }).click();
+    await expect(guide.getByText("chrome://flags/#enable-webmcp-testing")).toBeVisible();
+    await expect(guide.getByText(/Hosted acceptance is separate/)).toBeVisible();
     await expect(guide.getByText("Diagnostics")).toBeVisible();
     await expect(guide.getByText("Judge Demo details")).toBeVisible();
-    await guide.getByText("Judge Demo details").click();
-    await expect(guide.getByText("voltyn-relay").first()).toBeVisible();
-    await expect(guide.getByText("HUMAN_DISCOVERY_REQUIRED").first()).toBeVisible();
     await guide.getByRole("button", { name: "Close field guide" }).click();
     await expect(guide).toHaveCount(0);
+
+    const relayAction = page.getByTestId("landmark-action");
+    await expect(relayAction.getByText("Calibrate Resonance", { exact: true })).toBeVisible();
+    await relayAction.click();
+    await expect(page.getByText("interface · new")).toBeVisible();
+
+    await page.getByTestId("open-field-guide").click();
+    const reopenedGuide = page.getByTestId("field-guide-drawer");
+    await expect(reopenedGuide.getByTestId("echo-capability-note")).toContainText(
+      "Echo can use it now",
+    );
+    await reopenedGuide.getByText("Judge Demo details").click();
+    await expect(reopenedGuide.getByText("voltyn-relay").first()).toBeVisible();
+    await expect(reopenedGuide.getByText("HUMAN_DISCOVERY_REQUIRED").first()).toBeVisible();
+    await reopenedGuide.getByRole("button", { name: "Close field guide" }).click();
+    await expect(reopenedGuide).toHaveCount(0);
   });
 
   test("continues a saved expedition without resetting it", async ({ page }) => {
