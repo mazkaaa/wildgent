@@ -16,7 +16,6 @@
     "check": "biome check . && turbo run typecheck test",
     "format": "biome format --write .",
     "test": "turbo run test",
-    "test:e2e": "npm run test:e2e --workspace=@wildgent/game",
     "deploy": "npm run deploy --workspace=@wildgent/game"
   },
   "devDependencies": {

@@ -11,8 +11,6 @@ Use Node.js 22 or newer and npm 10.9.8 or newer. The root npm workspace contains
 - `npm run check` runs Biome, both package typechecks, and Vitest suites.
 - `npm run build` builds all Turbo workspaces for production.
 - `npm test` runs all Vitest suites.
-- `npm run test:e2e` runs the desktop Chromium Playwright journeys serially in one worker to limit
-  local CPU and memory use.
 - `npm run format` applies Biome formatting; inspect the diff before keeping changes.
 - Deploy with `npm run build` followed by `npm run deploy`; Wrangler publishes the existing `dist/`
   output as Cloudflare static assets.
@@ -22,18 +20,15 @@ Use Node.js 22 or newer and npm 10.9.8 or newer. The root npm workspace contains
 Engine rules and persistence tests are in `packages/game-engine/src/engine.test.ts`. App projection
 and objective tests are in `apps/game/src/tests/app-model.test.ts`; coordinator ordering and lock
 tests are in `coordinator.test.ts`; WebMCP registration and tool behavior are in
-`apps/game/src/webmcp/index.test.ts`. Browser journeys live in
-`apps/game/src/tests/e2e/journey.spec.ts` and use `localStorage.removeItem` in test setup for clean
-fixtures. These Playwright journeys cover the desktop manual UI flow; WebMCP adapter behavior is unit-tested,
-but external-agent WebMCP E2E is not automated and must be verified separately in a supported
-browser.
+`apps/game/src/webmcp/index.test.ts`. WebMCP adapter behavior is unit-tested, while gameplay and
+external-agent WebMCP acceptance are manually verified in a supported built-in browser.
 
 ## Style and review
 
 Biome is authoritative: TypeScript uses two spaces, recommended lint rules, import organization,
 and a 100-column width. Keep state transitions explicit and deterministic. Add focused tests for
-new refusal/progression branches and a Playwright journey for user-visible flows. Before review run
-`npm run check`, `npm run build`, `npm run test:e2e`, and `git diff --check`.
+new refusal/progression branches and manual built-in-browser rehearsal for user-visible flows.
+Before review run `npm run check`, `npm run build`, and `git diff --check`.
 
 ## Deployment configuration
 

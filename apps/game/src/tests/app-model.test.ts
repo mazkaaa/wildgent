@@ -5,13 +5,31 @@ import {
   getCurrentObjective,
   getObjectiveState,
   normalizeSnapshot,
+  PARTY_SKILLS,
   type Phase,
+  partySkillStateFor,
   resolveLandmarkAction,
   ZONE_CONTENT,
   type ZoneId,
 } from "../app-model";
 
 describe("WildGent static content projection", () => {
+  it("keeps presentation-only party skills locked at the Resonance boundary", () => {
+    const journey = { ...normalizeSnapshot({ phase: "journey" }), phase: "journey" as const };
+    expect(PARTY_SKILLS.map(({ id }) => partySkillStateFor(id, journey))).toEqual([
+      "ready",
+      "ready",
+      "locked",
+    ]);
+    const resonance = {
+      ...journey,
+      flags: { ...journey.flags, resonanceCalibrated: true, rubbleCleared: true },
+    };
+    expect(partySkillStateFor("interface", resonance)).toBe("ready");
+    expect(partySkillStateFor("ignite", resonance)).toBe("active");
+    expect(partySkillStateFor("break", resonance)).toBe("active");
+  });
+
   it("keeps the expedition to three fixed-camera zones", () => {
     expect(Object.keys(ZONE_CONTENT)).toEqual(["camp", "ruins", "core"]);
     expect(ZONE_CONTENT.camp.landmarks.map((landmark) => landmark.id)).toEqual([

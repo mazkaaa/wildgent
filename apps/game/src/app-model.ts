@@ -4,6 +4,8 @@ export type Phase = "preflight" | "journey" | "battle" | "complete";
 
 export type CharacterId = "cindra" | "grum" | "voltyn" | "guardian";
 
+export type PartySkillId = "ignite" | "break" | "interface";
+
 export type LandmarkId =
   | "camp-beacon"
   | "relay-station"
@@ -114,6 +116,41 @@ export type LandmarkActionResolution = {
   position: GridPosition;
   label: string;
   hint: string;
+};
+
+export type PartySkillState = "ready" | "active" | "locked";
+
+export type PartySkill = {
+  id: PartySkillId;
+  character: Exclude<CharacterId, "guardian">;
+  label: string;
+  detail: string;
+};
+
+export const PARTY_SKILLS: readonly PartySkill[] = [
+  {
+    id: "ignite",
+    character: "cindra",
+    label: "Cindra Ignite",
+    detail: "Activate resonance signals",
+  },
+  { id: "break", character: "grum", label: "Grum Break", detail: "Clear blocked paths" },
+  {
+    id: "interface",
+    character: "voltyn",
+    label: "Voltyn Interface",
+    detail: "Awaken ancient technology",
+  },
+];
+
+export const partySkillStateFor = (
+  skill: PartySkillId,
+  snapshot: GameSnapshot,
+): PartySkillState => {
+  if (skill === "interface" && !snapshot.flags.resonanceCalibrated) return "locked";
+  if (skill === "ignite") return snapshot.flags.resonanceCalibrated ? "active" : "ready";
+  if (skill === "break") return snapshot.flags.rubbleCleared ? "active" : "ready";
+  return "ready";
 };
 
 export type ObjectiveState = {

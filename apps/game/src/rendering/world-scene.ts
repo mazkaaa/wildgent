@@ -49,6 +49,38 @@ const COLORS = {
 const gridSize = { width: 10, height: 7 };
 const tileSize = 1.15;
 
+export type ZoneSceneIdentity = {
+  tileColors: readonly number[];
+  ground: number;
+  foliage: number;
+  stoneCount: number;
+  foliageCount: number;
+};
+
+export const ZONE_SCENE_IDENTITY: Record<ZoneId, ZoneSceneIdentity> = {
+  camp: {
+    tileColors: [COLORS.mossLight, COLORS.moss, COLORS.mossBright],
+    ground: COLORS.soil,
+    foliage: COLORS.mossLight,
+    stoneCount: 6,
+    foliageCount: 7,
+  },
+  ruins: {
+    tileColors: [COLORS.fernDeep, COLORS.moss, COLORS.stoneDark],
+    ground: COLORS.soilDark,
+    foliage: COLORS.fern,
+    stoneCount: 11,
+    foliageCount: 10,
+  },
+  core: {
+    tileColors: [COLORS.canopyDeep, COLORS.fernDeep, COLORS.cyanDeep],
+    ground: COLORS.stoneDark,
+    foliage: COLORS.fernDeep,
+    stoneCount: 5,
+    foliageCount: 4,
+  },
+};
+
 export type PresentationRequest = {
   key: string;
   promise: Promise<void>;
@@ -670,6 +702,9 @@ export class WorldScene {
   private readonly onHumanSignalClick?: HumanSignalClick;
   private readonly onCellClick?: CellClick;
   private readonly expeditionMarker = createExpeditionMarker();
+  private readonly characterMeshes = new Map<string, THREE.Object3D>();
+  private ruinsDoor: THREE.Object3D | null = null;
+  private coreVisual: THREE.Object3D | null = null;
   private readonly transientEffects = new Set<{
     group: THREE.Group;
     startedAt: number;
@@ -987,11 +1022,12 @@ export class WorldScene {
     zoneGroup.name = `${zone}-zone`;
     this.root.add(zoneGroup);
     const zoneOffset = ZONE_OFFSETS[zone];
+    const identity = ZONE_SCENE_IDENTITY[zone];
     for (let y = 0; y < gridSize.height; y += 1) {
       for (let x = 0; x < gridSize.width; x += 1) {
-        const tileColors = [COLORS.mossLight, COLORS.moss, COLORS.fernDeep, COLORS.mossBright];
         const tileMaterial = material(
-          tileColors[(x * 7 + y * 3 + zone.length) % tileColors.length] ?? COLORS.moss,
+          identity.tileColors[(x * 7 + y * 3 + zone.length) % identity.tileColors.length] ??
+            identity.ground,
         );
         const tile = new THREE.Mesh(
           new THREE.PlaneGeometry(tileSize * 0.94, tileSize * 0.94),
@@ -1009,14 +1045,14 @@ export class WorldScene {
 
     const clearing = new THREE.Mesh(
       new THREE.CylinderGeometry(5.7, 5.7, 0.08, 12),
-      material(COLORS.soil),
+      material(identity.ground),
     );
     clearing.position.set(zoneOffset.x, -0.04, zoneOffset.z);
     clearing.scale.z = 0.68;
     clearing.receiveShadow = true;
     zoneGroup.add(clearing);
 
-    for (let index = 0; index < 8; index += 1) {
+    for (let index = 0; index < identity.stoneCount; index += 1) {
       const angle = (index / 8) * Math.PI * 2 + zone.length * 0.2;
       const stone = new THREE.Mesh(
         new THREE.DodecahedronGeometry(0.12 + (index % 3) * 0.06, 0),
@@ -1034,9 +1070,9 @@ export class WorldScene {
 
     // A small deterministic fringe makes each clearing feel grown-in without adding
     // another simulation or touching the grid that owns interaction coordinates.
-    for (let index = 0; index < 5; index += 1) {
+    for (let index = 0; index < identity.foliageCount; index += 1) {
       const angle = zone.length * 0.31 + index * 1.21;
-      const tuft = createFoliageTuft(0.72 + (index % 3) * 0.14, COLORS.mossLight);
+      const tuft = createFoliageTuft(0.72 + (index % 3) * 0.14, identity.foliage);
       tuft.position.set(
         zoneOffset.x + Math.cos(angle) * (3.35 + (index % 2) * 0.5),
         0.02,
@@ -1184,7 +1220,9 @@ export class WorldScene {
     );
     door.rotation.set(Math.PI / 2, 0, Math.PI / 2);
     door.position.set(0, 1.5, -2.62);
+    door.name = "ruins-door";
     ruins.add(door);
+    this.ruinsDoor = door;
     this.animated.push({ object: door, phase: 0.7, amplitude: 0.035, speed: 0.9 });
 
     for (let index = 0; index < 7; index += 1) {
@@ -1257,6 +1295,7 @@ export class WorldScene {
       character.position.set(position.x, 0.03, position.z);
       character.userData = { type: "character", character: placement.id };
       this.root.add(character);
+      this.characterMeshes.set(placement.id, character);
       this.animated.push({
         object: character,
         phase: placement.x * 0.8,
@@ -1325,6 +1364,7 @@ export class WorldScene {
         material(COLORS.cyan, 0.25, COLORS.cyan),
       );
       light.position.y = 1.42;
+      light.name = "beacon-light";
       light.userData = { type: "beacon-light" };
       group.add(light);
       this.animated.push({ object: light, phase: 0.2, amplitude: 0.08, speed: 1.7 });
@@ -1345,6 +1385,7 @@ export class WorldScene {
         material(COLORS.cyan, 0.3, COLORS.cyan),
       );
       cap.position.y = 0.88;
+      cap.name = "relay-cap";
       group.add(cap);
       this.animated.push({ object: cap, phase: 0.5, amplitude: 0.07, speed: 1.9 });
     } else if (landmark === "ruins-rubble") {
@@ -1353,6 +1394,7 @@ export class WorldScene {
           new THREE.DodecahedronGeometry(0.35 + index * 0.04, 0),
           material(COLORS.stone),
         );
+        stone.name = "rubble-fragment";
         stone.position.set((index - 1.5) * 0.27, 0.31, Math.sin(index) * 0.18);
         stone.rotation.set(index * 0.4, index * 0.6, index * 0.25);
         stone.castShadow = true;
@@ -1371,6 +1413,7 @@ export class WorldScene {
         material(COLORS.gold, 0.38, COLORS.gold),
       );
       core.position.y = 0.47;
+      core.name = "power-core";
       group.add(core);
       this.animated.push({ object: core, phase: 0.2, amplitude: 0.12, speed: 1.45 });
     } else if (landmark === "ruins-sigil") {
@@ -1387,6 +1430,7 @@ export class WorldScene {
       );
       glyph.rotation.x = Math.PI / 2;
       glyph.position.y = 0.27;
+      glyph.name = "sigil-glyph";
       group.add(glyph);
     } else if (landmark === "ruins-vines") {
       const wall = box([0.8, 0.72, 0.16], COLORS.stone, 0.4);
@@ -1412,8 +1456,10 @@ export class WorldScene {
         new THREE.IcosahedronGeometry(0.55, 0),
         material(COLORS.cyan, 0.22, COLORS.cyan),
       );
+      core.name = "ancient-core-crystal";
       core.position.y = 0.92;
       group.add(core);
+      this.coreVisual = core;
       this.animated.push({ object: core, phase: 1, amplitude: 0.14, speed: 1.1 });
     }
     this.decorateLandmark(group, landmark);
@@ -1579,6 +1625,34 @@ export class WorldScene {
     const showSignal =
       snapshot.zone === "ruins" && snapshot.flags.sigilRead && !snapshot.flags.vinesDiscovered;
     for (const object of this.humanSignalMeshes) object.visible = showSignal;
+    this.updateStatePresentation(snapshot);
+  }
+
+  private updateStatePresentation(snapshot: GameSnapshot) {
+    const beacon = this.landmarkMeshes.get("camp-beacon")?.getObjectByName("beacon-light");
+    const relay = this.landmarkMeshes.get("relay-station")?.getObjectByName("relay-cap");
+    const power = this.landmarkMeshes.get("ruins-power")?.getObjectByName("power-core");
+    const sigil = this.landmarkMeshes.get("ruins-sigil")?.getObjectByName("sigil-glyph");
+    const rubble = this.landmarkMeshes.get("ruins-rubble");
+
+    beacon?.scale.setScalar(snapshot.flags.beaconLit ? 1.2 : 0.68);
+    relay?.scale.setScalar(snapshot.flags.resonanceCalibrated ? 1.2 : 0.72);
+    power?.scale.setScalar(snapshot.flags.powerRestored ? 1.18 : 0.72);
+    sigil?.scale.setScalar(snapshot.flags.sigilRead ? 1.18 : 0.72);
+    rubble?.traverse((child) => {
+      if (child.name === "rubble-fragment") child.visible = !snapshot.flags.rubbleCleared;
+    });
+
+    if (this.ruinsDoor) {
+      this.ruinsDoor.scale.setScalar(snapshot.flags.sigilRead ? 1.16 : 0.76);
+      this.ruinsDoor.visible = !snapshot.flags.vinesDiscovered;
+    }
+    const guardian = this.characterMeshes.get("guardian");
+    if (guardian) guardian.visible = snapshot.zone === "ruins" && !snapshot.flags.guardianDefeated;
+    if (this.coreVisual) {
+      this.coreVisual.scale.setScalar(snapshot.flags.coreEntered ? 1.16 : 0.74);
+      this.coreVisual.visible = snapshot.zone === "core" || snapshot.flags.coreEntered;
+    }
   }
 
   private setMarkerActor(snapshot: GameSnapshot) {

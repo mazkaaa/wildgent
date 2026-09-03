@@ -5,7 +5,7 @@
 - `packages/game-engine/src/` — authoritative aggregate, commands, queries, schemas, fixtures,
   failures, and persistence.
 - `apps/game/src/` — React app projection, mutation coordinator, Three.js scene, and WebMCP adapter.
-- `apps/game/src/tests/` — model, coordinator, adapter, and Playwright coverage.
+- `apps/game/src/tests/` — model, coordinator, and adapter coverage; gameplay is manually checked in the built-in browser.
 
 ## Purpose
 

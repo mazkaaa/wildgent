@@ -62,8 +62,8 @@ The manual local preflight is different:
    new journey, continue a saved journey, or choose **Judge Demo** to reach `/play`.
 4. Confirm the in-game Echo Link status and registered tools.
 
-This only checks local browser/API availability. A local status, mock, Vitest test, or Playwright
-adapter test does not establish external-agent Site-tool discovery or invocation. Hosted acceptance
+This only checks local browser/API availability. A local status, mock, or Vitest adapter test does
+not establish external-agent Site-tool discovery or invocation. Hosted acceptance
 must be performed separately against the deployed HTTPS page using the event-supported WebMCP
 origin-trial/preview environment and a compatible external agent. This repository does not claim
 that hosted verification has passed.

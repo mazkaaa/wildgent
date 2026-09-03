@@ -10,6 +10,8 @@ import {
   getObjectiveState,
   INITIAL_SNAPSHOT,
   type LandmarkId,
+  PARTY_SKILLS,
+  partySkillStateFor,
   resolveLandmarkAction,
   ZONE_CONTENT,
 } from "./app-model";
@@ -796,6 +798,25 @@ export function GameApp({
               );
             })}
           </div>
+          <fieldset className="party-skills" data-testid="party-skills">
+            <legend className="sr-only">Party skills</legend>
+            {PARTY_SKILLS.map((skill) => {
+              const state = partySkillStateFor(skill.id, snapshot);
+              return (
+                <div
+                  className={`party-skill party-skill-${skill.character} party-skill-${state}`}
+                  data-state={state}
+                  data-testid={`party-skill-${skill.id}`}
+                  key={skill.id}
+                >
+                  <span className="party-skill-character">{CHARACTERS[skill.character].name}</span>
+                  <strong>{skill.label.replace(`${CHARACTERS[skill.character].name} `, "")}</strong>
+                  <small>{state === "locked" ? "Locked until Resonance" : skill.detail}</small>
+                  <span className="party-skill-state">{state}</span>
+                </div>
+              );
+            })}
+          </fieldset>
           <fieldset className="capability-row">
             <legend className="sr-only">Echo capabilities</legend>
             <span className="capability-label">Echo</span>
@@ -990,7 +1011,7 @@ function BattlePanel({
 }) {
   const healthWidth = `${Math.max(0, Math.min(100, (battle.enemyHp / battle.enemyMaxHp) * 100))}%`;
   return (
-    <section className="battle-hud" data-testid="battle-panel">
+    <section className="battle-hud battle-hud-light" data-testid="battle-panel">
       <div className="rail-label">
         <span>Guardian encounter</span>
         <span>

@@ -16,9 +16,9 @@ presentation and browser boundaries.
 ## Source-of-truth order
 
 1. Executable TypeScript under `packages/game-engine/src/` and `apps/game/src/`.
-2. Vite, Wrangler, TypeScript, Biome, Turbo, and Playwright configuration.
+2. Vite, Wrangler, TypeScript, Biome, and Turbo configuration.
 3. Workspace package scripts and lockfile.
-4. Unit and browser tests.
+4. Unit tests and manual built-in-browser acceptance.
 5. Existing Markdown, including product references.
 
 Knowledge files are hand-written. Generated build output belongs under ignored `dist/` directories,

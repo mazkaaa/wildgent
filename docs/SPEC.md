@@ -710,12 +710,10 @@ Verify:
 - additive tool registration works,
 - unsupported WebMCP API is handled cleanly.
 
-### E2E
-Keep Playwright scope small:
+### Gameplay acceptance
 
-1. Full manual happy path.
-2. Judge Demo flow through adapter-driven tool calls.
-
+Automated coverage stays at the deterministic engine, adapter, and projection level. Before
+submission, manually replay the full human happy path and Judge Demo with the built-in browser.
 Real hosted WebMCP must be repeatedly tested manually with the actual supported agent/browser.
 
 Do not spend large amounts of time testing renderer internals unless a real bug demands it.

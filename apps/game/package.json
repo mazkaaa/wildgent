@@ -9,7 +9,6 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "playwright test",
     "deploy": "wrangler deploy"
   },
   "dependencies": {
@@ -22,7 +21,6 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.54.1",
     "@mcp-b/webmcp-types": "5.0.1",
-    "@playwright/test": "1.62.1",
     "@tailwindcss/vite": "4.3.3",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.5",

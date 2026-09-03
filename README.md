@@ -15,7 +15,7 @@ and reach the Ancient Core.
 - Effect 4 game engine running authoritatively in the browser
 - Native `document.modelContext` WebMCP integration
 - Cloudflare Workers static-assets deployment
-- Vitest, Playwright, Biome, npm workspaces, and Turborepo
+- Vitest, Biome, npm workspaces, and Turborepo
 
 ## Workspace
 
@@ -50,8 +50,10 @@ Quality checks:
 ```bash
 npm run check
 npm run build
-npm run test:e2e # one serialized desktop Chromium journey suite
 ```
+
+Gameplay acceptance is manual: open the built-in browser, start **Judge Demo**, and replay the
+human and Echo flow on the deployed HTTPS game before submission.
 
 ## WebMCP setup
 
@@ -91,7 +93,7 @@ game:
    are available.
 
 This local check is only a browser/API preflight. A local ready status, a mock,
-or a Playwright/Vitest adapter test does not prove that an external agent can
+or an automated adapter test does not prove that an external agent can
 discover or invoke the Site tools.
 
 Hosted acceptance is a separate gate: use the deployed HTTPS page with the

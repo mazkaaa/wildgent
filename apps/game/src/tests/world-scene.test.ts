@@ -6,7 +6,20 @@ import {
   easedPresentationProgress,
   RESPONSIVE_CAMERA_FOV_CEILING,
   responsiveCameraFrameFor,
+  ZONE_SCENE_IDENTITY,
 } from "../rendering/world-scene";
+
+describe("world scene identity", () => {
+  it("uses deterministic, distinct density for each authored zone", () => {
+    expect(ZONE_SCENE_IDENTITY.camp.foliageCount).toBeLessThan(
+      ZONE_SCENE_IDENTITY.ruins.foliageCount,
+    );
+    expect(ZONE_SCENE_IDENTITY.ruins.stoneCount).toBeGreaterThan(
+      ZONE_SCENE_IDENTITY.core.stoneCount,
+    );
+    expect(ZONE_SCENE_IDENTITY.camp.tileColors).not.toEqual(ZONE_SCENE_IDENTITY.core.tileColors);
+  });
+});
 
 describe("authored camera framing", () => {
   it("keeps player-led framing inside the authored pan bounds", () => {
