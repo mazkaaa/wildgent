@@ -348,11 +348,27 @@ button:disabled {
 }
 
 .landing-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
   max-width: 52ch;
   margin: 16px 0 0;
   color: var(--sun);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.landing-error button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-family: var(--utility);
+  font-size: 10px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-transform: uppercase;
 }
 
 .button {
@@ -400,8 +416,16 @@ button:disabled {
 
 .button-note {
   color: var(--paper-muted);
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: 0.08em;
+}
+
+.button-judge {
+  min-width: 142px;
+}
+
+.button-judge > span:first-child {
+  color: var(--sun);
 }
 
 .preflight-specimen {
@@ -411,6 +435,27 @@ button:disabled {
   max-width: 580px;
   width: 100%;
   justify-self: end;
+}
+
+.landing-world-canvas-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.landing-world-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.specimen-fallback {
+  position: absolute;
+  inset: 0;
+}
+
+.is-world-live .specimen-fallback {
+  visibility: hidden;
 }
 
 .specimen-orbit {
@@ -1157,7 +1202,7 @@ button:disabled {
   font-size: 11px;
   line-height: 1.35;
 }
-.error-note > span {
+.error-mark {
   display: grid;
   place-items: center;
   width: 16px;
@@ -1697,6 +1742,89 @@ button:disabled {
   bottom: 28px;
   left: 30px;
   width: min(475px, 43vw);
+  border: 1px solid rgba(240, 231, 207, 0.24);
+  background: rgba(7, 25, 20, 0.48);
+  transition:
+    opacity 180ms ease,
+    background 180ms ease;
+}
+
+.party-hud.is-busy {
+  opacity: 0.58;
+}
+
+.party-hud[open] {
+  background: rgba(7, 25, 20, 0.72);
+}
+
+.party-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 44px;
+  padding: 7px 10px;
+  color: var(--paper);
+  cursor: pointer;
+  list-style: none;
+}
+
+.party-summary::-webkit-details-marker {
+  display: none;
+}
+
+.party-summary::after {
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  color: var(--sun);
+  content: "";
+  transform: rotate(45deg) translateY(-2px);
+}
+
+.party-hud[open] .party-summary::after {
+  transform: rotate(225deg) translate(-1px, -1px);
+}
+
+.party-summary:hover {
+  color: var(--signal);
+}
+
+.party-summary-identity,
+.party-summary-echo,
+.party-summary-count {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.party-summary-identity > span,
+.party-summary-echo > span,
+.party-summary-count > span {
+  overflow: hidden;
+  color: var(--paper-muted);
+  font-family: var(--utility);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.party-summary-echo,
+.party-summary-count {
+  text-align: right;
+}
+
+.party-summary-count strong {
+  color: var(--signal);
+  font-family: var(--utility);
+  font-size: 12px;
+}
+
+.party-details {
+  padding: 0 10px 10px;
 }
 
 .party-cards {
@@ -1753,7 +1881,7 @@ button:disabled {
 .party-card small {
   margin-top: 2px;
   color: var(--paper-muted);
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: 0.04em;
 }
 
@@ -1773,7 +1901,7 @@ button:disabled {
 .capability-label {
   margin-right: 3px;
   color: var(--paper);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .echo-status {
@@ -1799,7 +1927,7 @@ button:disabled {
   padding: 5px 7px;
   border: 1px solid rgba(240, 231, 207, 0.3);
   color: var(--paper-muted);
-  font-size: 8px;
+  font-size: 10px;
 }
 
 .capability.is-ready {
@@ -1837,7 +1965,7 @@ button:disabled {
 .party-skill-state {
   display: block;
   font-family: var(--utility);
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
@@ -1975,7 +2103,7 @@ button:disabled {
   grid-column: 2;
   margin-top: 3px;
   color: var(--paper-muted);
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: 0.04em;
   text-transform: none;
 }
@@ -2319,6 +2447,27 @@ button:disabled {
   font-size: 10px;
 }
 
+.error-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.error-note button {
+  flex: 0 0 auto;
+  margin: -3px -4px 0 0;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  color: currentColor;
+  cursor: pointer;
+  font-family: var(--utility);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .paused-overlay {
   z-index: 10;
   inset: 0;
@@ -2351,6 +2500,13 @@ button:disabled {
   color: var(--signal);
   cursor: pointer;
   font: inherit;
+}
+
+.pause-label {
+  font-family: var(--utility);
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 
 .debug-drawer {
@@ -2656,7 +2812,7 @@ button:disabled {
   .objective-hud p,
   .capability-label,
   .echo-status {
-    display: none;
+    font-size: 10px;
   }
 
   .world-toast {

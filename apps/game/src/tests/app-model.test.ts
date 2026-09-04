@@ -9,6 +9,7 @@ import {
   type Phase,
   partySkillStateFor,
   resolveLandmarkAction,
+  unlockedPartySkillCountFor,
   ZONE_CONTENT,
   type ZoneId,
 } from "../app-model";
@@ -28,6 +29,8 @@ describe("WildGent static content projection", () => {
     expect(partySkillStateFor("interface", resonance)).toBe("ready");
     expect(partySkillStateFor("ignite", resonance)).toBe("active");
     expect(partySkillStateFor("break", resonance)).toBe("active");
+    expect(unlockedPartySkillCountFor(journey)).toBe(2);
+    expect(unlockedPartySkillCountFor(resonance)).toBe(3);
   });
 
   it("keeps the expedition to three fixed-camera zones", () => {

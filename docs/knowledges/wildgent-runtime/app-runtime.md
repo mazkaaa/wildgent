@@ -11,9 +11,9 @@
 - `apps/game/src/app-runtime.ts` — shared runtime exposed to React and WebMCP.
 - `apps/game/src/rendering/world-scene.ts` — raw Three.js map, marker, camera, and pointer raycasts.
 
-`WildGentApp` owns a small History API pathname seam. `/` renders the dedicated `LandingPage` and
-never mounts the world canvas; `/play` renders `GameApp` only when the shared runtime has left
-preflight. The app keeps one `AppRuntime` and one WebMCP registration outside the route surface,
+`WildGentApp` owns a small History API pathname seam. `/` renders the dedicated `LandingPage` with
+a non-interactive `WorldScene` preview of the current snapshot; `/play` renders `GameApp` only when
+the shared runtime has left preflight. The app keeps one `AppRuntime` and one WebMCP registration outside the route surface,
 so browser Back/Forward and the Landing page's Continue journey action preserve authoritative state.
 A direct `/play` visit with a preflight runtime is replaced with `/` instead of auto-starting or
 showing an empty game surface. Begin journey and Start Judge Demo dispatch their explicit start
@@ -27,7 +27,9 @@ seam, not a second game state. The HUD also contains the objective rail, directi
 controls, party/battle state, activity-based Adventure log, and the field guide. The visible Landing
 control returns to `/` without resetting. Leaving `/play` cancels queued movement, clears the
 presentation sync, disposes the scene, and releases the pause lock. The guide sections cover How
-to Play, Human + Echo, Echo Link (including the exact Judge Demo runbook), and diagnostics.
+to Play, Human + Echo, concise Echo Link guidance, a closed Judge and technical runbook, and
+diagnostics. Party skills and Echo capabilities remain available through a collapsed native
+disclosure so the world stays primary.
 
 ## Runtime flow
 
@@ -62,7 +64,7 @@ refusal while queries remain available.
 
 ## Three.js contract
 
-`WorldScene` is mounted only after gameplay leaves preflight. It creates the 10 by 7 tile map,
+`WorldScene` creates the 10 by 7 tile map,
 landmark hit targets, a shared expedition marker, and camera. The selected-landmark state flows from
 `GameApp` through `setSnapshot(snapshot, selectedLandmark)` / `setSelectedLandmark`; the scene uses
 that seam to highlight the selected landmark and provide a smaller presentation-only camera pull,
@@ -71,7 +73,10 @@ per-zone camera base and applies bounded horizontal pan with the player as the p
 `responsiveCameraFrameFor` then adapts that presentation frame to the canvas aspect: narrow views
 preserve desktop horizontal coverage by opening the vertical field of view up to a ceiling and
 retreating along the target vector only if necessary. It changes neither authoritative state nor the
-camera target used by pointer raycasts.
+camera target used by pointer raycasts. The landing preview creates a second presentation-only
+`WorldScene` from the same authoritative snapshot, registers no interaction callbacks, observes its
+own canvas size, and disposes on route change. If WebGL creation fails, the landing page keeps its
+static signal specimen.
 Direct movement interpolates explicit marker and camera start/destination values on one shared eased
 timeline for up to 600 ms; the presentation gate settles only after both reach their destinations.
 Selection changes during travel retarget the active frame while preserving the gate promise, so the

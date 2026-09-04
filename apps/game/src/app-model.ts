@@ -153,6 +153,9 @@ export const partySkillStateFor = (
   return "ready";
 };
 
+export const unlockedPartySkillCountFor = (snapshot: GameSnapshot): number =>
+  PARTY_SKILLS.filter(({ id }) => partySkillStateFor(id, snapshot) !== "locked").length;
+
 export type ObjectiveState = {
   id:
     | "complete"

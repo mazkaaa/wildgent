@@ -13,6 +13,7 @@ import {
   PARTY_SKILLS,
   partySkillStateFor,
   resolveLandmarkAction,
+  unlockedPartySkillCountFor,
   ZONE_CONTENT,
 } from "./app-model";
 import { useAppRoute } from "./app-route";
@@ -256,7 +257,6 @@ export function GameApp({
   const [visibleActivityId, setVisibleActivityId] = useState<string | null>(null);
   const [logOpen, setLogOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
-  const [guideJudgeOpen, setGuideJudgeOpen] = useState(false);
   const [coachOpen, setCoachOpen] = useState(false);
   const [coachStep, setCoachStep] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -384,8 +384,10 @@ export function GameApp({
       if (!result.ok) {
         setError(
           result.code === "BUSY"
-            ? "The field lens is still resolving the last move."
-            : "The field kit could not complete that action.",
+            ? "The field lens is still resolving the last move. Try again when it is ready."
+            : snapshot.phase === "battle"
+              ? "The guardian did not accept that move. Choose another response and try again."
+              : "That action could not be completed here. Move to the highlighted place and try again.",
         );
         return false;
       }
@@ -398,15 +400,32 @@ export function GameApp({
         setError(
           "message" in result.value && typeof result.value.message === "string"
             ? result.value.message
-            : "That action is not available yet.",
+            : snapshot.phase === "battle"
+              ? "The guardian did not accept that move. Choose another response and try again."
+              : "That action is not available here yet. Follow the current objective and try again.",
         );
         return false;
       }
       setSnapshot(result.snapshot);
       return true;
     },
-    [runtime],
+    [runtime, snapshot.phase],
   );
+
+  const resetExpedition = useCallback(async () => {
+    if (busy) return;
+    setError(null);
+    const result = await runtime.reset({ mode: "journey" });
+    if (!result.ok) {
+      setError(
+        result.code === "BUSY"
+          ? "The field lens is still resolving the last move. Try Reset expedition again when it is ready."
+          : "The expedition could not reset. Your current progress is still safe; try again when the field is ready.",
+      );
+      return;
+    }
+    setSnapshot(result.snapshot);
+  }, [busy, runtime]);
 
   const activeLandmark = useMemo(() => {
     const selected = selectedLandmark ? getLandmark(selectedLandmark) : undefined;
@@ -644,6 +663,7 @@ export function GameApp({
   const party = snapshot.flags.resonanceCalibrated
     ? (["cindra", "grum", "voltyn"] as const)
     : (["cindra", "grum"] as const);
+  const unlockedSkillCount = unlockedPartySkillCountFor(snapshot);
 
   return (
     <main className="game-shell" data-testid="game-shell" data-route-focus="game" tabIndex={-1}>
@@ -691,7 +711,7 @@ export function GameApp({
               }}
               data-testid="return-to-landing"
             >
-              <span aria-hidden="true">←</span> Landing
+              <span aria-hidden="true">←</span> Return to camp
             </a>
             <span className="hud-sync-state">{busy ? "syncing" : "ready"}</span>
             <button
@@ -732,7 +752,10 @@ export function GameApp({
               onClick={() => setPaused((current) => !current)}
               data-testid="pause-expedition"
             >
-              <span aria-hidden="true">{paused ? "▶" : "Ⅱ"}</span>
+              <span className="pause-icon" aria-hidden="true">
+                {paused ? "▶" : "Ⅱ"}
+              </span>
+              <span className="pause-label">{paused ? "Resume" : "Pause"}</span>
             </button>
             <button
               className="menu-button"
@@ -780,58 +803,75 @@ export function GameApp({
           </div>
         ) : null}
 
-        <section className="party-hud" aria-label="Expedition party and Echo capabilities">
-          <div className="party-cards">
-            {party.map((characterId) => {
-              const character = CHARACTERS[characterId];
-              return (
-                <div className={`party-card party-${characterId}`} key={characterId}>
-                  <span className="party-avatar" aria-hidden="true">
-                    {character.name[0]}
-                  </span>
-                  <span className="party-card-copy">
-                    <strong>{character.name}</strong>
-                    <small>{character.role}</small>
-                  </span>
-                  <span className="party-health" aria-hidden="true" />
-                </div>
-              );
-            })}
+        <details className={`party-hud${busy ? " is-busy" : ""}`}>
+          <summary className="party-summary">
+            <span className="party-summary-identity">
+              <strong>Party</strong>
+              <span>{party.map((characterId) => CHARACTERS[characterId].name).join(" · ")}</span>
+            </span>
+            <span className="party-summary-echo">
+              <strong>Echo</strong>
+              <span>{snapshot.echo.signalFound ? "Ready" : "Listening"}</span>
+            </span>
+            <span className="party-summary-count">
+              <strong>{unlockedSkillCount}</strong>
+              <span>unlocked</span>
+            </span>
+          </summary>
+          <div className="party-details">
+            <div className="party-cards">
+              {party.map((characterId) => {
+                const character = CHARACTERS[characterId];
+                return (
+                  <div className={`party-card party-${characterId}`} key={characterId}>
+                    <span className="party-avatar" aria-hidden="true">
+                      {character.name[0]}
+                    </span>
+                    <span className="party-card-copy">
+                      <strong>{character.name}</strong>
+                      <small>{character.role}</small>
+                    </span>
+                    <span className="party-health" aria-hidden="true" />
+                  </div>
+                );
+              })}
+            </div>
+            <fieldset className="party-skills" data-testid="party-skills">
+              <legend className="sr-only">Party skills</legend>
+              {PARTY_SKILLS.map((skill) => {
+                const state = partySkillStateFor(skill.id, snapshot);
+                return (
+                  <div
+                    className={`party-skill party-skill-${skill.character} party-skill-${state}`}
+                    data-state={state}
+                    data-testid={`party-skill-${skill.id}`}
+                    key={skill.id}
+                  >
+                    <span className="party-skill-character">
+                      {CHARACTERS[skill.character].name}
+                    </span>
+                    <strong>
+                      {skill.label.replace(`${CHARACTERS[skill.character].name} `, "")}
+                    </strong>
+                    <small>{state === "locked" ? "Locked until Resonance" : skill.detail}</small>
+                    <span className="party-skill-state">{state}</span>
+                  </div>
+                );
+              })}
+            </fieldset>
+            <fieldset className="capability-row">
+              <legend className="sr-only">Echo capabilities</legend>
+              <span className="capability-label">Echo capabilities</span>
+              <span className="capability is-ready">ignite</span>
+              <span className="capability is-ready">break</span>
+              <span
+                className={`capability ${snapshot.flags.resonanceCalibrated ? "is-new" : "is-locked"}`}
+              >
+                interface{snapshot.flags.resonanceCalibrated ? " · new" : " · locked"}
+              </span>
+            </fieldset>
           </div>
-          <fieldset className="party-skills" data-testid="party-skills">
-            <legend className="sr-only">Party skills</legend>
-            {PARTY_SKILLS.map((skill) => {
-              const state = partySkillStateFor(skill.id, snapshot);
-              return (
-                <div
-                  className={`party-skill party-skill-${skill.character} party-skill-${state}`}
-                  data-state={state}
-                  data-testid={`party-skill-${skill.id}`}
-                  key={skill.id}
-                >
-                  <span className="party-skill-character">{CHARACTERS[skill.character].name}</span>
-                  <strong>{skill.label.replace(`${CHARACTERS[skill.character].name} `, "")}</strong>
-                  <small>{state === "locked" ? "Locked until Resonance" : skill.detail}</small>
-                  <span className="party-skill-state">{state}</span>
-                </div>
-              );
-            })}
-          </fieldset>
-          <fieldset className="capability-row">
-            <legend className="sr-only">Echo capabilities</legend>
-            <span className="capability-label">Echo</span>
-            <span className="echo-status">
-              {snapshot.echo.signalFound ? "Human lens open" : "Echo listening"}
-            </span>
-            <span className="capability is-ready">ignite</span>
-            <span className="capability is-ready">break</span>
-            <span
-              className={`capability ${snapshot.flags.resonanceCalibrated ? "is-new" : "is-locked"}`}
-            >
-              interface{snapshot.flags.resonanceCalibrated ? " · new" : " · locked"}
-            </span>
-          </fieldset>
-        </section>
+        </details>
 
         <fieldset className="landmark-strip">
           <legend className="sr-only">Visible landmarks</legend>
@@ -884,7 +924,11 @@ export function GameApp({
             <button
               className="hud-action-button"
               type="button"
-              onClick={() => void runtime.reset({ mode: "journey" })}
+              onClick={() => {
+                if (window.confirm("Walk it again? Your completed expedition will be replaced."))
+                  void resetExpedition();
+              }}
+              disabled={busy}
             >
               Walk it again
             </button>
@@ -958,8 +1002,13 @@ export function GameApp({
 
         {error ? (
           <div className="error-note" role="alert">
-            <span aria-hidden="true">!</span>
-            {error}
+            <span className="error-mark" aria-hidden="true">
+              !
+            </span>
+            <span className="error-copy">{error}</span>
+            <button type="button" onClick={() => setError(null)} aria-label="Dismiss error">
+              Dismiss
+            </button>
           </div>
         ) : null}
         {paused && !coachOpen ? (
@@ -975,14 +1024,12 @@ export function GameApp({
           <FieldGuideDrawer
             busy={busy}
             echoLink={echoLink}
-            guideJudgeOpen={guideJudgeOpen}
             onClose={closeGuide}
-            onJudgeToggle={() => setGuideJudgeOpen((current) => !current)}
             onReplayCoach={openCoach}
             paused={paused}
             snapshot={snapshot}
             closeButtonRef={guideCloseRef}
-            runtime={runtime}
+            onReset={() => void resetExpedition()}
           />
         ) : null}
         {coachOpen ? (
@@ -1085,27 +1132,23 @@ function BattlePanel({
 type FieldGuideDrawerProps = {
   busy: boolean;
   echoLink: EchoLinkView;
-  guideJudgeOpen: boolean;
   onClose: () => void;
-  onJudgeToggle: () => void;
   onReplayCoach: () => void;
   paused: boolean;
   snapshot: GameSnapshot;
   closeButtonRef: RefObject<HTMLButtonElement | null>;
-  runtime: AppRuntime;
+  onReset: () => void;
 };
 
 function FieldGuideDrawer({
   busy,
   echoLink,
-  guideJudgeOpen,
   onClose,
-  onJudgeToggle,
   onReplayCoach,
   paused,
   snapshot,
   closeButtonRef,
-  runtime,
+  onReset,
 }: FieldGuideDrawerProps) {
   const registeredTools = echoLink.registeredTools.length
     ? echoLink.registeredTools.join(" · ")
@@ -1224,62 +1267,55 @@ function FieldGuideDrawer({
               </div>
             </div>
             <p>
-              Echo Link is optional infrastructure. If this browser does not support it, the human
-              journey remains fully playable and no objective is blocked.
+              Invite Echo: inspect Site tools, then ask Echo to call get_game_state and look_around.
             </p>
-            <div className="guide-connect">
-              <h3>Connect Echo</h3>
-              <p className="guide-connect-lede">
-                Primary path: use the current ChatGPT desktop app with GPT-5.6 Sol or Terra.
-              </p>
-              <ol className="guide-connect-steps">
-                <li>
-                  <strong>Open the field</strong>
-                  <span>
-                    Use <code>@Browser</code> to open the local <code>/play</code> page.
-                  </span>
-                </li>
-                <li>
-                  <strong>Invite Echo in</strong>
-                  <span>
-                    Inspect Site tools, then ask Echo to call <code>get_game_state</code> followed
-                    by <code>look_around</code>.
-                  </span>
-                </li>
-              </ol>
-              <p className="guide-capability-note" data-testid="echo-capability-note" role="status">
-                <strong>Capability gate</strong> The <code>interface</code> capability unlocks only
-                after Voltyn Resonance.
-                {snapshot.flags.resonanceCalibrated
-                  ? " Voltyn Resonance is complete; Echo can use it now."
-                  : " It is still locked, but no gameplay objective is blocked."}
-              </p>
-              <a
-                className="guide-readme-link"
-                href="https://github.com/mazkaaa/wildgent#webmcp-setup"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Read the README WebMCP setup guide
-              </a>
-              <details className="guide-connection-details">
-                <summary>Technical connection notes</summary>
-                <div className="guide-connection-body">
-                  <p>
-                    For a manual Chrome local preflight, enable
-                    <code>chrome://flags/#enable-webmcp-testing</code>, relaunch Chrome, and confirm
-                    the in-game preflight reports that tool registration is available.
-                  </p>
-                  <p>
-                    Hosted acceptance is separate: it still requires HTTPS, the supported WebMCP
-                    origin trial, and a compatible external agent.
-                  </p>
-                </div>
-              </details>
-            </div>
-            <details className="guide-judge-details" open={guideJudgeOpen} onToggle={onJudgeToggle}>
-              <summary>Judge Demo details</summary>
+            <p className="guide-capability-note" data-testid="echo-capability-note" role="status">
+              <strong>Capability boundary</strong> The <code>interface</code> capability unlocks
+              only after Voltyn Resonance; no gameplay objective is blocked before then.
+            </p>
+            <details className="guide-judge-details">
+              <summary>Judge and technical details</summary>
               <div className="guide-judge-body">
+                <div className="guide-connect">
+                  <h3>Connect Echo</h3>
+                  <p className="guide-connect-lede">
+                    Primary path: use the current ChatGPT desktop app with GPT-5.6 Sol or Terra.
+                  </p>
+                  <ol className="guide-connect-steps">
+                    <li>
+                      <strong>Open the field</strong>
+                      <span>
+                        Use <code>@Browser</code> to open the local <code>/play</code> page.
+                      </span>
+                    </li>
+                    <li>
+                      <strong>Invite Echo in</strong>
+                      <span>
+                        Inspect Site tools, then ask Echo to call <code>get_game_state</code>{" "}
+                        followed by <code>look_around</code>.
+                      </span>
+                    </li>
+                  </ol>
+                  <a
+                    className="guide-readme-link"
+                    href="https://github.com/mazkaaa/wildgent#webmcp-setup"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Read the README WebMCP setup guide
+                  </a>
+                  <div className="guide-connection-body">
+                    <p>
+                      For a manual Chrome local preflight, enable
+                      <code>chrome://flags/#enable-webmcp-testing</code>, relaunch Chrome, and
+                      confirm the in-game preflight reports that tool registration is available.
+                    </p>
+                    <p>
+                      Hosted acceptance is separate: it still requires HTTPS, the supported WebMCP
+                      origin trial, and a compatible external agent.
+                    </p>
+                  </div>
+                </div>
                 <p>
                   Supported boundary: Echo Link needs a secure HTTPS page in a compatible Chrome
                   build with the WebMCP origin trial and <code>document.modelContext</code> enabled.
@@ -1393,7 +1429,11 @@ function FieldGuideDrawer({
             <button
               className="debug-reset"
               type="button"
-              onClick={() => void runtime.reset({ mode: "journey" })}
+              onClick={() => {
+                if (window.confirm("Reset expedition? Your current progress will be replaced."))
+                  onReset();
+              }}
+              disabled={busy}
             >
               Reset expedition
             </button>
